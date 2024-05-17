@@ -1,0 +1,21 @@
+[package]
+name = "grovedbg"
+authors = ["Evgeny Fomin <evgeny.fomin@dash.org>"]
+version = "0.2.0"
+description = "GroveDB inspection tool"
+edition = "2021"
+
+[dependencies]
+eframe = "0.27.2"
+grovedbg-types = { git = "https://github.com/dashpay/grovedb", branch = "grove-dbg" }
+hex = "0.4.3"
+log = "0.4.21"
+reqwest = { version = "0.12.4", features = ["json"] }
+strum = { version = "0.26.2", features = ["strum_macros", "derive"] }
+thiserror = "1.0.60"
+tokio = { version = "1.37.0", features = ["rt", "sync"] }
+tracing-subscriber = "0.3.18"
+wasm-bindgen-futures = "0.4.42"
+web-sys = "0.3.69"
+
+[workspace]
