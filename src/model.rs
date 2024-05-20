@@ -165,6 +165,14 @@ impl Tree {
     }
 
     pub(crate) fn insert(&mut self, path: Path, key: Key, node: Node) {
+        {
+            let mut state = node.ui_state.borrow_mut();
+            state.key_display_variant = DisplayVariant::guess(&key);
+            if let Element::Item { value } = &node.element {
+                state.item_display_variant = DisplayVariant::guess(&value);
+            }
+        }
+
         // Make sure all subtrees exist and according nodes are there as well
         self.populate_subtrees_chain(path.clone());
 

@@ -1,7 +1,5 @@
 //! Tree structure UI module
 
-use std::borrow::Borrow;
-
 use eframe::{
     egui::{self, Id},
     emath::TSTransform,

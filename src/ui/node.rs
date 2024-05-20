@@ -7,7 +7,7 @@ use tokio::sync::mpsc::Sender;
 use super::common::{binary_label, bytes_by_display_variant, path_label};
 use crate::{
     fetch::Message,
-    model::{Element, Node, NodeCtx},
+    model::{Element, NodeCtx},
 };
 
 pub(crate) fn draw_node<'a>(ui: &mut egui::Ui, sender: &Sender<Message>, node_ctx: NodeCtx<'a>) {

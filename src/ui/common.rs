@@ -10,8 +10,8 @@ use eframe::{
 use crate::model::Path;
 
 const MAX_BYTES: usize = 10;
-const MAX_HEX_LENGTH: usize = 20;
-const HEX_PARTS_LENGTH: usize = 8;
+const MAX_HEX_LENGTH: usize = 64;
+const HEX_PARTS_LENGTH: usize = 20;
 
 fn bytes_as_slice(bytes: &[u8]) -> String {
     if bytes.len() <= MAX_BYTES {
@@ -38,11 +38,20 @@ pub(crate) fn bytes_as_hex(bytes: &[u8]) -> String {
     }
 }
 
+pub(crate) fn bytes_as_int(bytes: &[u8]) -> String {
+    if let Ok(arr) = bytes.try_into() {
+        i64::from_be_bytes(arr).to_string()
+    } else {
+        String::from("[E]: must be 8 bytes")
+    }
+}
+
 pub(crate) fn bytes_by_display_variant(bytes: &[u8], display_variant: &DisplayVariant) -> String {
     match display_variant {
         DisplayVariant::U8 => bytes_as_slice(bytes),
         DisplayVariant::String => String::from_utf8_lossy(bytes).to_string(),
         DisplayVariant::Hex => bytes_as_hex(bytes),
+        DisplayVariant::Int => bytes_as_int(bytes),
     }
 }
 
@@ -65,9 +74,10 @@ fn display_variant_dropdown<'a>(
 ) -> Response {
     let response = ui.add(Label::new(RichText::new(text).color(color)).sense(Sense::click()));
     response.context_menu(|menu| {
-        menu.radio_value(display_variant, DisplayVariant::U8, "Integers");
+        menu.radio_value(display_variant, DisplayVariant::U8, "u8 array");
         menu.radio_value(display_variant, DisplayVariant::String, "UTF-8 String");
         menu.radio_value(display_variant, DisplayVariant::Hex, "Hex String");
+        menu.radio_value(display_variant, DisplayVariant::Int, "i64");
     });
     response
 }
@@ -80,12 +90,24 @@ pub(crate) fn binary_label<'a>(
     binary_label_colored(ui, bytes, display_variant, Color32::GRAY)
 }
 
-#[derive(Debug, Default, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Default)]
 pub(crate) enum DisplayVariant {
     #[default]
     U8,
     String,
     Hex,
+    Int,
+}
+
+impl DisplayVariant {
+    pub fn guess(bytes: &[u8]) -> Self {
+        match bytes.len() {
+            1 => DisplayVariant::U8,
+            8 => DisplayVariant::Int,
+            32 => DisplayVariant::Hex,
+            _ => DisplayVariant::String,
+        }
+    }
 }
 
 pub(crate) fn path_label<'a>(
