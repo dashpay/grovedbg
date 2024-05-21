@@ -1,4 +1,5 @@
 pub(crate) mod alignment;
+pub(crate) mod path_display;
 
 use std::{
     cell::{RefCell, RefMut},

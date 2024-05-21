@@ -27,8 +27,14 @@ pub(crate) enum FetchError {
     // TransportError(#[from] grovedbg_grpc::tonic::Status),
 }
 
+#[cfg(target_arch = "wasm32")]
 fn base_url() -> String {
     web_sys::window().unwrap().location().origin().unwrap()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn base_url() -> String {
+    unimplemented!()
 }
 
 pub(crate) async fn process_messages(mut receiver: Receiver<Message>, tree: Arc<Mutex<Tree>>) {

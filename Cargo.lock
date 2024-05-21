@@ -1505,6 +1505,7 @@ dependencies = [
  "hex",
  "log",
  "reqwest",
+ "slab",
  "strum",
  "thiserror",
  "tokio",
