@@ -1,4 +1,4 @@
-use std::{cell::RefCell, iter, ops::Deref};
+use std::{cell::RefCell, fmt, iter, ptr};
 
 use slab::Slab;
 
@@ -10,6 +10,12 @@ pub(crate) struct PathCtx {
     slab: RefCell<Slab<PathSegment>>,
 }
 
+impl fmt::Debug for PathCtx {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("slab")
+    }
+}
+
 impl PathCtx {
     pub fn new() -> Self {
         let mut slab = Slab::new();
@@ -18,6 +24,7 @@ impl PathCtx {
             children_slab_ids: Vec::new(),
             bytes: Vec::new(),
             display: DisplayVariant::U8,
+            level: 0,
         });
         PathCtx {
             slab: RefCell::new(slab),
@@ -37,6 +44,7 @@ pub(crate) struct PathSegment {
     children_slab_ids: Vec<SegmentId>,
     bytes: Vec<u8>,
     display: DisplayVariant,
+    level: usize,
 }
 
 impl PathSegment {
@@ -49,12 +57,45 @@ impl PathSegment {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct PathTwo<'c> {
     head_slab_id: SegmentId,
     ctx: &'c PathCtx,
 }
 
+impl PartialEq for PathTwo<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        ptr::eq(&self.ctx, &other.ctx) && self.head_slab_id == other.head_slab_id
+    }
+}
+
+impl PartialOrd for PathTwo<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        ptr::eq(&self.ctx, &other.ctx).then_some(self.head_slab_id.cmp(&other.head_slab_id))
+    }
+}
+
+impl Eq for PathTwo<'_> {}
+
+// TODO: comparing paths of different slabs makes no sence
+impl Ord for PathTwo<'_> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).expect("paths of different ctxes")
+    }
+}
+
 impl<'c> PathTwo<'c> {
+    pub fn level(&self) -> usize {
+        self.for_last_segment(|k| k.level)
+    }
+
+    pub fn parent(&self) -> Option<PathTwo<'c>> {
+        Some(PathTwo {
+            head_slab_id: self.for_last_segment(|s| s.parent_slab_id)?,
+            ctx: self.ctx,
+        })
+    }
+
     pub fn child(&self, key: &[u8]) -> PathTwo<'c> {
         if let Some(child_segment_id) = {
             let slab = self.ctx.slab.borrow();
@@ -71,11 +112,13 @@ impl<'c> PathTwo<'c> {
             }
         } else {
             let mut slab = self.ctx.slab.borrow_mut();
+            let level = slab[self.head_slab_id].level;
             let child_segment_id = slab.insert(PathSegment {
                 parent_slab_id: (self.head_slab_id != 0).then_some(self.head_slab_id),
                 children_slab_ids: Vec::new(),
                 bytes: key.to_vec(),
                 display: DisplayVariant::guess(key),
+                level: level + 1,
             });
             let segment = &mut slab[self.head_slab_id];
             segment.children_slab_ids.push(child_segment_id);
@@ -86,7 +129,7 @@ impl<'c> PathTwo<'c> {
         }
     }
 
-    pub fn for_key<F, T>(&self, f: F) -> T
+    pub fn for_last_segment<F, T>(&self, f: F) -> T
     where
         F: FnOnce(&PathSegment) -> T,
     {
@@ -169,7 +212,7 @@ mod tests {
         sub_1.child(b"key3");
         let mut children: Vec<Vec<u8>> = Vec::new();
         sub_1.for_children(|children_iter| {
-            children.extend(children_iter.map(|p| p.for_key(|k| k.bytes().to_vec())))
+            children.extend(children_iter.map(|p| p.for_last_segment(|k| k.bytes().to_vec())))
         });
         assert_eq!(children, vec![b"key2", b"key3"]);
     }
@@ -189,6 +232,7 @@ mod tests {
                 .map(|segment| segment.bytes().to_vec())
                 .collect()
         });
-        assert_eq!(path_vec, vec![b"key1", b"key2", b"key3", b"key4"])
+        assert_eq!(path_vec, vec![b"key1", b"key2", b"key3", b"key4"]);
+        assert_eq!(path.for_last_segment(|k| k.level), 4);
     }
 }

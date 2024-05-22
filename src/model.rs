@@ -10,99 +10,100 @@ use std::{
 
 use eframe::{egui, epaint::Pos2};
 
-use self::alignment::{
-    expanded_subtree_dimentions, COLLAPSED_SUBTREE_HEIGHT, COLLAPSED_SUBTREE_WIDTH,
+use self::{
+    alignment::{expanded_subtree_dimentions, COLLAPSED_SUBTREE_HEIGHT, COLLAPSED_SUBTREE_WIDTH},
+    path_display::PathTwo,
 };
 use crate::ui::DisplayVariant;
 
-#[derive(Debug, PartialEq, Eq, Clone, Default, Hash)]
-pub(crate) struct Path(pub Vec<Vec<u8>>);
+// #[derive(Debug, PartialEq, Eq, Clone, Default, Hash)]
+// pub(crate) struct Path(pub Vec<Vec<u8>>);
 
 pub(crate) type Key = Vec<u8>;
 pub(crate) type KeySlice<'a> = &'a [u8];
 
-impl PartialOrd for Path {
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        self.0
-            .len()
-            .cmp(&other.0.len())
-            .then_with(|| self.0.cmp(&other.0))
-            .into()
-    }
-}
+// impl PartialOrd for Path {
+//     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+//         self.0
+//             .len()
+//             .cmp(&other.0.len())
+//             .then_with(|| self.0.cmp(&other.0))
+//             .into()
+//     }
+// }
 
-impl Ord for Path {
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
-        self.0
-            .len()
-            .cmp(&other.0.len())
-            .then_with(|| self.0.cmp(&other.0))
-    }
-}
+// impl Ord for Path {
+//     fn cmp(&self, other: &Self) -> cmp::Ordering {
+//         self.0
+//             .len()
+//             .cmp(&other.0.len())
+//             .then_with(|| self.0.cmp(&other.0))
+//     }
+// }
 
-impl From<Vec<Vec<u8>>> for Path {
-    fn from(value: Vec<Vec<u8>>) -> Self {
-        Self(value)
-    }
-}
+// impl From<Vec<Vec<u8>>> for Path {
+//     fn from(value: Vec<Vec<u8>>) -> Self {
+//         Self(value)
+//     }
+// }
 
-impl Deref for Path {
-    type Target = Vec<Vec<u8>>;
+// impl Deref for Path {
+//     type Target = Vec<Vec<u8>>;
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
 
-impl DerefMut for Path {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
+// impl DerefMut for Path {
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.0
+//     }
+// }
 
-#[derive(Clone, Copy)]
-struct SetVisibility<'a> {
-    tree: &'a Tree,
-    path: &'a Path,
-}
+// #[derive(Clone, Copy)]
+// struct SetVisibility<'a, 'c> {
+//     tree: &'a Tree<'c>,
+//     path: &'a Path,
+// }
 
-impl<'a> SetVisibility<'a> {
-    pub(crate) fn set_visible(&self, key: KeySlice, visible: bool) {
-        let mut path = self.path.clone();
-        path.push(key.to_owned());
-        if let Some(subtree) = self.tree.get_subtree(&path) {
-            subtree.subtree().set_visible(visible);
+// impl<'a, 'c> SetVisibility<'a, 'c> {
+//     pub(crate) fn set_visible(&self, key: KeySlice, visible: bool) {
+//         let mut path = self.path.clone();
+//         path.push(key.to_owned());
+//         if let Some(subtree) = self.tree.get_subtree(&path) {
+//             subtree.subtree().set_visible(visible);
 
-            if !visible {
-                self.tree
-                    .subtrees
-                    .range::<Path, _>(&path..)
-                    .filter(|(p, _)| p.starts_with(&path))
-                    .for_each(|(_, s)| {
-                        s.set_visible(false);
-                    });
-            }
-        }
-    }
+//             if !visible {
+//                 self.tree
+//                     .subtrees
+//                     .range::<Path, _>(&path..)
+//                     .filter(|(p, _)| p.starts_with(&path))
+//                     .for_each(|(_, s)| {
+//                         s.set_visible(false);
+//                     });
+//             }
+//         }
+//     }
 
-    pub(crate) fn visible(&self, key: KeySlice) -> bool {
-        let mut path = self.path.clone();
-        path.push(key.to_owned());
-        self.tree
-            .get_subtree(&path)
-            .map(|subtree| subtree.subtree().visible())
-            .unwrap_or_default()
-    }
-}
+//     pub(crate) fn visible(&self, key: KeySlice) -> bool {
+//         let mut path = self.path.clone();
+//         path.push(key.to_owned());
+//         self.tree
+//             .get_subtree(&path)
+//             .map(|subtree| subtree.subtree().visible())
+//             .unwrap_or_default()
+//     }
+// }
 
 /// Structure that holds the currently known state of GroveDB.
 #[derive(Debug, Default)]
-pub(crate) struct Tree {
-    pub(crate) subtrees: BTreeMap<Path, Subtree>,
+pub(crate) struct Tree<'c> {
+    pub(crate) subtrees: BTreeMap<PathTwo<'c>, Subtree>,
     pub(crate) levels_dimentions: RefCell<Vec<(f32, f32)>>,
 }
 
-impl Tree {
+impl Tree<'_> {
     pub(crate) fn new() -> Self {
         Default::default()
     }
@@ -115,22 +116,24 @@ impl Tree {
 
             subtree.ui_state.borrow_mut().children_width = 0.;
             let mut levels_height = self.levels_dimentions.borrow_mut();
-            if levels_height.len() < path.len() + 1 {
+            if levels_height.len() < path.level() + 1 {
                 levels_height.push(Default::default());
             }
-            levels_height[path.len()].0 = 0.0;
+            levels_height[path.level()].0 = 0.0;
 
             let (width, height) = subtree.update_base_dimensions();
             // Propagate width to parent subtrees
-            for depth in (0..path.len()).rev() {
-                let parent_path = &path[0..depth].to_vec().into();
-                if let Some(parent) = self.subtrees.get(&parent_path) {
-                    parent.ui_state.borrow_mut().children_width += width;
-                    levels_height[parent_path.len()].0 += width;
-                }
+            let mut current_parent = path.parent();
+            while let Some((parent_path, parent)) = current_parent
+                .map(|p| self.subtrees.get(&p).map(|s| (p, s)))
+                .flatten()
+            {
+                parent.ui_state.borrow_mut().children_width += width;
+                levels_height[parent_path.level()].0 += width;
+                current_parent = parent_path.parent();
             }
 
-            levels_height[path.len()].1 = levels_height[path.len()].1.max(height);
+            levels_height[path.level()].1 = levels_height[path.level()].1.max(height);
         }
     }
 
