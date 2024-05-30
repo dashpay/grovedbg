@@ -8,12 +8,10 @@ use std::sync::{Arc, Mutex};
 
 use eframe::egui::{self, emath::TSTransform, Visuals};
 use fetch::Message;
+use model::path_display::PathCtx;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
-use crate::{
-    model::Tree,
-    ui::{draw_legend, TreeDrawer},
-};
+use crate::{model::Tree, ui::TreeDrawer};
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {}
@@ -25,48 +23,52 @@ fn main() {
     let web_options = eframe::WebOptions::default();
 
     let (sender, receiver) = channel(10);
-    let tree: Arc<Mutex<Tree>> = Default::default();
+    let path_ctx: &'static PathCtx = Box::leak(Box::new(PathCtx::new()));
+    let tree: Arc<Mutex<Tree>> = Arc::new(Mutex::new(Tree::new(path_ctx)));
 
     let t = Arc::clone(&tree);
     wasm_bindgen_futures::spawn_local(async move {
-        fetch::process_messages(receiver, t).await;
+        fetch::process_messages(receiver, t.as_ref(), path_ctx).await;
     });
 
     sender.blocking_send(Message::FetchRoot).unwrap();
 
-    wasm_bindgen_futures::spawn_local(async {
+    wasm_bindgen_futures::spawn_local(async move {
         eframe::WebRunner::new()
             .start(
                 "the_canvas_id", // hardcode it
                 web_options,
-                Box::new(move |cc| Box::new(App::new(cc, tree, sender))),
+                Box::new(move |cc| Box::new(App::new(cc, tree, path_ctx, sender))),
             )
             .await
             .expect("failed to start eframe");
     });
 }
 
-struct App {
+struct App<'c> {
     transform: TSTransform,
-    tree: Arc<Mutex<Tree>>,
+    tree: Arc<Mutex<Tree<'c>>>,
+    path_ctx: &'c PathCtx,
     sender: Sender<Message>,
 }
 
-impl App {
+impl<'c> App<'c> {
     fn new(
-        cc: &eframe::CreationContext<'_>,
-        tree: Arc<Mutex<Tree>>,
+        _cc: &eframe::CreationContext<'_>,
+        tree: Arc<Mutex<Tree<'c>>>,
+        path_ctx: &'c PathCtx,
         sender: Sender<Message>,
     ) -> Self {
         App {
             transform: Default::default(),
             tree,
+            path_ctx,
             sender,
         }
     }
 }
 
-impl eframe::App for App {
+impl<'c> eframe::App for App<'c> {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ctx.set_visuals(Visuals::dark());
@@ -115,7 +117,7 @@ impl eframe::App for App {
                 drawer.draw_tree();
             }
 
-            draw_legend(ui);
+            // draw_legend(ui);
         });
     }
 }

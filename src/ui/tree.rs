@@ -15,27 +15,28 @@ use crate::{
     fetch::Message,
     model::{
         alignment::{COLLAPSED_SUBTREE_WIDTH, NODE_HEIGHT},
-        Element, Key, KeySlice, NodeCtx, Path, SubtreeCtx, Tree,
+        path_display::PathTwo,
+        Element, Key, KeySlice, Node, NodeCtx, SubtreeCtx, Tree,
     },
 };
 
 const KV_PER_PAGE: usize = 10;
 
-pub(crate) struct TreeDrawer<'u, 't> {
+pub(crate) struct TreeDrawer<'u, 't, 'c> {
     ui: &'u mut egui::Ui,
     transform: TSTransform,
     rect: Rect,
-    references: Vec<(Pos2, Path, Key)>,
-    tree: &'t Tree,
+    references: Vec<(Pos2, PathTwo<'t>, Key)>,
+    tree: &'t Tree<'c>,
     sender: &'t Sender<Message>,
 }
 
-impl<'u, 't> TreeDrawer<'u, 't> {
+impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
     pub(crate) fn new(
         ui: &'u mut egui::Ui,
         transform: TSTransform,
         rect: Rect,
-        tree: &'t Tree,
+        tree: &'t Tree<'c>,
         sender: &'t Sender<Message>,
     ) -> Self {
         Self {
@@ -48,11 +49,11 @@ impl<'u, 't> TreeDrawer<'u, 't> {
         }
     }
 
-    fn draw_node_area<'b>(
-        &mut self,
+    fn draw_node_area<'a>(
+        &'a mut self,
         parent_coords: Option<Pos2>,
         coords: Pos2,
-        node_ctx: NodeCtx<'b>,
+        node_ctx: &NodeCtx<'a, 't>,
     ) {
         let layer_response = egui::Area::new(Id::new(("area", node_ctx.egui_id())))
             .fixed_pos(coords)
@@ -86,10 +87,10 @@ impl<'u, 't> TreeDrawer<'u, 't> {
             .set_transform_layer(layer_response.layer_id, self.transform);
     }
 
-    fn draw_subtree_part<'a>(&mut self, mut coords: Pos2, node_ctx: NodeCtx<'a>) {
+    fn draw_subtree_part(&mut self, mut coords: Pos2, node_ctx: NodeCtx<'t, 't>) {
         let subtree_ctx = node_ctx.subtree_ctx();
-        let mut current_level_nodes: Vec<Option<(Option<KeySlice>, KeySlice)>> = Vec::new();
-        let mut next_level_nodes: Vec<Option<(Option<KeySlice>, KeySlice)>> = Vec::new();
+        let mut current_level_nodes: Vec<Option<(Option<Key>, KeySlice)>> = Vec::new();
+        let mut next_level_nodes: Vec<Option<(Option<Key>, KeySlice)>> = Vec::new();
         let mut level: u32 = 0;
         let levels = node_ctx.subtree().levels();
         let leafs = node_ctx.subtree().leafs();
@@ -109,17 +110,17 @@ impl<'u, 't> TreeDrawer<'u, 't> {
 
             for item in current_level_nodes.drain(..) {
                 if let Some((parent_key, cur_node_ctx)) = item
-                    .map(|(p, k)| subtree_ctx.get_node(&k).map(|ctx| (p, ctx)))
+                    .map(|(p, k)| subtree_ctx.get_node(k.to_vec()).map(|ctx| (p, ctx)))
                     .flatten()
                 {
                     let parent_out_coords = parent_key
                         .map(|k| subtree_ctx.subtree().get_node_output(&k))
                         .flatten();
-                    self.draw_node_area(parent_out_coords, coords, cur_node_ctx);
+                    self.draw_node_area(parent_out_coords, coords, &cur_node_ctx);
 
-                    let (node, _, key) = cur_node_ctx.split();
+                    // let (node, _, key) = cur_node_ctx.split();
 
-                    if let Element::Reference { path, key } = &node.element {
+                    if let Element::Reference { path, key } = &cur_node_ctx.node().element {
                         self.references.push((
                             cur_node_ctx.node().ui_state.borrow().output_point,
                             path.clone(),
@@ -134,9 +135,9 @@ impl<'u, 't> TreeDrawer<'u, 't> {
                             .borrow()
                             .show_left
                             .then_some(
-                                node.left_child
-                                    .as_deref()
-                                    .map(|child_key| (Some(key), child_key)),
+                                cur_node_ctx.node().left_child.as_deref().map(|child_key| {
+                                    (Some(cur_node_ctx.key().to_vec()), child_key)
+                                }),
                             )
                             .flatten(),
                     );
@@ -148,9 +149,9 @@ impl<'u, 't> TreeDrawer<'u, 't> {
                             .borrow()
                             .show_right
                             .then_some(
-                                node.right_child
-                                    .as_deref()
-                                    .map(|child_key| (Some(key), child_key)),
+                                cur_node_ctx.node().right_child.as_deref().map(|child_key| {
+                                    (Some(cur_node_ctx.key().to_vec()), child_key)
+                                }),
                             )
                             .flatten(),
                     );
@@ -170,7 +171,7 @@ impl<'u, 't> TreeDrawer<'u, 't> {
         }
     }
 
-    fn draw_subtree(&mut self, coords: Pos2, subtree_ctx: SubtreeCtx) {
+    fn draw_subtree(&mut self, coords: Pos2, subtree_ctx: SubtreeCtx<'t, 'c>) {
         if subtree_ctx.subtree().is_expanded() {
             self.draw_subtree_expanded(coords, subtree_ctx);
         } else {
@@ -178,7 +179,7 @@ impl<'u, 't> TreeDrawer<'u, 't> {
         }
     }
 
-    fn draw_subtree_collapsed(&mut self, coords: Pos2, subtree_ctx: SubtreeCtx) {
+    fn draw_subtree_collapsed(&mut self, coords: Pos2, subtree_ctx: SubtreeCtx<'t, 'c>) {
         let subtree = subtree_ctx.subtree();
         let layer_response = egui::Area::new(subtree_ctx.egui_id())
             .fixed_pos(coords)
@@ -209,7 +210,7 @@ impl<'u, 't> TreeDrawer<'u, 't> {
                                 if let Some(key) = &subtree.root_node {
                                     // TODO error handling
                                     let _ = self.sender.blocking_send(Message::FetchBranch {
-                                        path: subtree_ctx.path().clone(),
+                                        path: subtree_ctx.path().to_vec(),
                                         key: key.clone(),
                                     });
                                 }
@@ -219,7 +220,7 @@ impl<'u, 't> TreeDrawer<'u, 't> {
                                 if menu.button("Fetch root").clicked() {
                                     // TODO error handling
                                     let _ = self.sender.blocking_send(Message::FetchNode {
-                                        path: subtree_ctx.path().clone(),
+                                        path: subtree_ctx.path().to_vec(),
                                         key: key.clone(),
                                     });
                                 }
@@ -228,7 +229,7 @@ impl<'u, 't> TreeDrawer<'u, 't> {
                             if menu.button("Unload").clicked() {
                                 // TODO error handling
                                 let _ = self.sender.blocking_send(Message::UnloadSubtree {
-                                    path: subtree_ctx.path().clone(),
+                                    path: subtree_ctx.path().to_vec(),
                                 });
                             }
                         });
@@ -265,12 +266,11 @@ impl<'u, 't> TreeDrawer<'u, 't> {
                                 key: ref_key,
                             } = &node_ctx.node().element
                             {
-                                if subtree_ctx.path() != ref_path {
-                                    self.references.push((
-                                        subtree.get_subtree_output_point(),
-                                        ref_path.clone(),
-                                        ref_key.clone(),
-                                    ));
+                                if subtree_ctx.path() != *ref_path {
+                                    let point = subtree.get_subtree_output_point();
+                                    let key = ref_key.clone();
+                                    let path: PathTwo<'c> = *ref_path;
+                                    self.references.push((point, path, key));
                                 }
                             }
 
@@ -305,7 +305,7 @@ impl<'u, 't> TreeDrawer<'u, 't> {
                                     | Element::Sumtree { .. }
                                     | Element::Reference { .. }
                             ) {
-                                draw_element(ui, node_ctx);
+                                draw_element(ui, &node_ctx);
                             }
 
                             ui.allocate_ui(
@@ -348,7 +348,7 @@ impl<'u, 't> TreeDrawer<'u, 't> {
             .set_transform_layer(layer_response.layer_id, self.transform);
     }
 
-    fn draw_subtree_expanded(&mut self, coords: Pos2, subtree_ctx: SubtreeCtx) {
+    fn draw_subtree_expanded(&mut self, coords: Pos2, subtree_ctx: SubtreeCtx<'t, 't>) {
         subtree_ctx.get_root().into_iter().for_each(|node_ctx| {
             self.draw_subtree_part(coords, node_ctx);
         });
@@ -367,41 +367,38 @@ impl<'u, 't> TreeDrawer<'u, 't> {
             .iter_subtrees()
             .filter(|ctx| ctx.subtree().visible())
         {
-            let parent_path = if subtree_ctx.path().len() == 0 {
-                None
-            } else {
-                Some(&subtree_ctx.path()[0..subtree_ctx.path().len() - 1])
-            };
+            let parent_path = subtree_ctx.path().parent();
             if current_parent != parent_path {
                 current_parent = parent_path;
                 if let Some(path) = current_parent {
-                    let path: Path = path.to_vec().into();
                     let parent_subtree = self.tree.subtrees.get(&path).expect("parent must exist");
                     current_x_per_parent = parent_subtree.get_subtree_input_point().unwrap().x
                         - parent_subtree.width() / 2.0
                         - COLLAPSED_SUBTREE_WIDTH / 2.0;
                 }
             }
-            if subtree_ctx.path().len() > current_level {
+            if subtree_ctx.path().level() > current_level {
                 current_height += self.tree.levels_dimentions.borrow()[current_level].1
                     + self.tree.levels_dimentions.borrow()[current_level].0 * 0.05;
                 current_level += 1;
             }
 
-            if subtree_ctx.path().len() > 0 {
+            if subtree_ctx.path().level() > 0 {
                 current_x_per_parent += subtree_ctx.subtree().width() / 2.0;
             }
             self.draw_subtree(Pos2::new(current_x_per_parent, current_height), subtree_ctx);
-            if subtree_ctx.path().len() > 0 {
+            if subtree_ctx.path().level() > 0 {
                 current_x_per_parent += subtree_ctx.subtree().width() / 2.0;
             }
 
             let root_in = subtree_ctx.subtree().get_subtree_input_point();
-            let mut parent_path = subtree_ctx.path().clone();
-            let key = parent_path.pop();
-            let subtree_parent_out: Option<Pos2> = self
-                .tree
-                .get_subtree(&parent_path)
+            let key = subtree_ctx
+                .path()
+                .for_last_segment(|key| key.bytes().to_vec());
+            let subtree_parent_out: Option<Pos2> = parent_path
+                .as_ref()
+                .map(|path| self.tree.get_subtree(path))
+                .flatten()
                 .map(|s| key.map(|k| s.subtree().get_node_output(&k)))
                 .flatten()
                 .flatten();

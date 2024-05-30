@@ -7,7 +7,7 @@ use eframe::{
     epaint::Color32,
 };
 
-use crate::model::Path;
+use crate::model::path_display::PathTwo;
 
 const MAX_BYTES: usize = 10;
 const MAX_HEX_LENGTH: usize = 64;
@@ -112,40 +112,43 @@ impl DisplayVariant {
 
 pub(crate) fn path_label<'a>(
     ui: &mut egui::Ui,
-    path: &'a Path,
+    path: PathTwo<'a>,
     display_variant: &mut DisplayVariant,
 ) -> egui::Response {
-    let mut iter = path.iter();
-    if let Some(key) = iter.next_back() {
-        let mut text = String::from("[");
-        if let Some(parent) = iter.next_back() {
-            if iter.next_back().is_some() {
-                text.push_str("..., ");
-            }
-            text.push_str(&bytes_by_display_variant(parent, display_variant));
-            text.push_str(", ");
-        }
-
-        text.push_str(&bytes_by_display_variant(key, display_variant));
-        text.push_str("]");
-
-        let response = display_variant_dropdown(ui, &text, display_variant, Color32::LIGHT_GRAY);
-
-        response.on_hover_ui_at_pointer(|hover_ui| {
+    path.for_segments(|mut iter| {
+        if let Some(key) = iter.next_back() {
             let mut text = String::from("[");
-            let mut iter = path.iter();
-            let last = iter.next_back();
-            iter.for_each(|segment| {
-                text.push_str(&bytes_by_display_variant(segment, display_variant));
+            if let Some(parent) = iter.next_back() {
+                if iter.next_back().is_some() {
+                    text.push_str("..., ");
+                }
+                text.push_str(&bytes_by_display_variant(parent.bytes(), display_variant));
                 text.push_str(", ");
-            });
-            last.into_iter().for_each(|segment| {
-                text.push_str(&bytes_by_display_variant(segment, display_variant));
-                text.push_str("]");
-            });
-            hover_ui.label(text);
-        })
-    } else {
-        ui.label("Root subtree")
-    }
+            }
+
+            text.push_str(&bytes_by_display_variant(key.bytes(), display_variant));
+            text.push_str("]");
+
+            let response =
+                display_variant_dropdown(ui, &text, display_variant, Color32::LIGHT_GRAY);
+
+            response.on_hover_ui_at_pointer(|hover_ui| {
+                let mut text = String::from("[");
+                path.for_segments(|mut iter| {
+                    let last = iter.next_back();
+                    iter.for_each(|segment| {
+                        text.push_str(&bytes_by_display_variant(segment.bytes(), display_variant));
+                        text.push_str(", ");
+                    });
+                    last.into_iter().for_each(|segment| {
+                        text.push_str(&bytes_by_display_variant(segment.bytes(), display_variant));
+                        text.push_str("]");
+                    });
+                    hover_ui.label(text);
+                })
+            })
+        } else {
+            ui.label("Root subtree")
+        }
+    })
 }

@@ -1,4 +1,11 @@
-use std::{cell::RefCell, fmt, iter, ptr};
+use std::{
+    borrow::BorrowMut,
+    cell::RefCell,
+    collections::VecDeque,
+    fmt,
+    hash::{Hash, Hasher},
+    iter, ptr,
+};
 
 use slab::Slab;
 
@@ -8,6 +15,7 @@ type SegmentId = usize;
 
 pub(crate) struct PathCtx {
     slab: RefCell<Slab<PathSegment>>,
+    root_children_slab_ids: RefCell<Vec<SegmentId>>,
 }
 
 impl fmt::Debug for PathCtx {
@@ -18,24 +26,25 @@ impl fmt::Debug for PathCtx {
 
 impl PathCtx {
     pub fn new() -> Self {
-        let mut slab = Slab::new();
-        slab.insert(PathSegment {
-            parent_slab_id: None,
-            children_slab_ids: Vec::new(),
-            bytes: Vec::new(),
-            display: DisplayVariant::U8,
-            level: 0,
-        });
         PathCtx {
-            slab: RefCell::new(slab),
+            slab: Default::default(),
+            root_children_slab_ids: Default::default(),
         }
     }
 
     pub fn get_root(&self) -> PathTwo {
         PathTwo {
-            head_slab_id: 0,
+            head_slab_id: None,
             ctx: self,
         }
+    }
+
+    pub fn add_path(&self, path: Vec<Vec<u8>>) -> PathTwo {
+        let mut current_path = self.get_root();
+        for segment in path.into_iter() {
+            current_path = current_path.child(segment);
+        }
+        current_path
     }
 }
 
@@ -57,10 +66,16 @@ impl PathSegment {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct PathTwo<'c> {
-    head_slab_id: SegmentId,
+    head_slab_id: Option<SegmentId>,
     ctx: &'c PathCtx,
+}
+
+impl Hash for PathTwo<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.for_segments(|segments_iter| segments_iter.for_each(|seg| state.write(seg.bytes())));
+    }
 }
 
 impl PartialEq for PathTwo<'_> {
@@ -71,7 +86,7 @@ impl PartialEq for PathTwo<'_> {
 
 impl PartialOrd for PathTwo<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        ptr::eq(&self.ctx, &other.ctx).then_some(self.head_slab_id.cmp(&other.head_slab_id))
+        Some(self.head_slab_id.cmp(&other.head_slab_id))
     }
 }
 
@@ -86,61 +101,96 @@ impl Ord for PathTwo<'_> {
 
 impl<'c> PathTwo<'c> {
     pub fn level(&self) -> usize {
-        self.for_last_segment(|k| k.level)
+        self.for_last_segment(|k| k.level).unwrap_or_default()
     }
 
     pub fn parent(&self) -> Option<PathTwo<'c>> {
-        Some(PathTwo {
-            head_slab_id: self.for_last_segment(|s| s.parent_slab_id)?,
-            ctx: self.ctx,
+        self.head_slab_id.map(|id| {
+            let slab = self.ctx.slab.borrow();
+            let segment = &slab[id];
+            PathTwo {
+                head_slab_id: segment.parent_slab_id,
+                ctx: self.ctx,
+            }
         })
     }
 
-    pub fn child(&self, key: &[u8]) -> PathTwo<'c> {
-        if let Some(child_segment_id) = {
+    pub fn parent_with_key(&self) -> Option<(PathTwo<'c>, Vec<u8>)> {
+        self.head_slab_id.map(|id| {
             let slab = self.ctx.slab.borrow();
-            let segment = slab.get(self.head_slab_id).expect("ids must be valid");
-            segment
-                .children_slab_ids
+            let segment = &slab[id];
+            (
+                PathTwo {
+                    head_slab_id: segment.parent_slab_id,
+                    ctx: self.ctx,
+                },
+                segment.bytes().to_vec(),
+            )
+        })
+    }
+
+    pub fn child(&self, key: Vec<u8>) -> PathTwo<'c> {
+        let mut slab = self.ctx.slab.borrow_mut();
+        let mut root_children = self.ctx.root_children_slab_ids.borrow_mut();
+        let level = self
+            .head_slab_id
+            .map(|id| slab[id].level)
+            .unwrap_or_default();
+
+        if let Some(child_segment_id) = {
+            let children_vec = self
+                .head_slab_id
+                .map(|id| &slab[id].children_slab_ids)
+                .unwrap_or(&root_children);
+            children_vec
                 .iter()
-                .find(|id| slab.get(**id).expect("ids must be valid").bytes == key)
+                .find(|id| &slab[**id].bytes == &key)
                 .copied()
         } {
             PathTwo {
-                head_slab_id: child_segment_id,
+                head_slab_id: Some(child_segment_id),
                 ctx: self.ctx,
             }
         } else {
-            let mut slab = self.ctx.slab.borrow_mut();
-            let level = slab[self.head_slab_id].level;
             let child_segment_id = slab.insert(PathSegment {
-                parent_slab_id: (self.head_slab_id != 0).then_some(self.head_slab_id),
+                parent_slab_id: self.head_slab_id,
                 children_slab_ids: Vec::new(),
-                bytes: key.to_vec(),
-                display: DisplayVariant::guess(key),
+                display: DisplayVariant::guess(&key),
+                bytes: key,
                 level: level + 1,
             });
-            let segment = &mut slab[self.head_slab_id];
-            segment.children_slab_ids.push(child_segment_id);
+            let children_vec = self
+                .head_slab_id
+                .map(|id| &mut slab[id].children_slab_ids)
+                .unwrap_or(&mut root_children);
+            children_vec.push(child_segment_id);
             PathTwo {
-                head_slab_id: child_segment_id,
+                head_slab_id: Some(child_segment_id),
                 ctx: self.ctx,
             }
         }
     }
 
-    pub fn for_last_segment<F, T>(&self, f: F) -> T
+    fn is_root(&self) -> bool {
+        self.head_slab_id.is_none()
+    }
+
+    pub fn for_last_segment<F, T>(&self, f: F) -> Option<T>
     where
         F: FnOnce(&PathSegment) -> T,
     {
-        let slab = self.ctx.slab.borrow();
-        f(&slab[self.head_slab_id])
+        self.head_slab_id.map(|id| {
+            let slab = self.ctx.slab.borrow();
+            f(&slab[id])
+        })
     }
 
     pub fn update_display_variant(&self, display: DisplayVariant) {
-        let mut slab = self.ctx.slab.borrow_mut();
-        let segment = &mut slab[self.head_slab_id];
-        segment.display = display;
+        self.head_slab_id.into_iter().for_each(|id| {
+            let mut slab = self.ctx.slab.borrow_mut();
+            let segment = &mut slab[id];
+            segment.display = display;
+        });
     }
 
     pub fn for_segments<F, T>(&self, f: F) -> T
@@ -149,7 +199,7 @@ impl<'c> PathTwo<'c> {
     {
         let slab = self.ctx.slab.borrow();
         let mut ids = Vec::new();
-        let mut current_id = Some(self.head_slab_id);
+        let mut current_id = self.head_slab_id;
         while let Some(current_segment) = current_id.map(|id| &slab[id]) {
             ids.push(current_segment);
             current_id = current_segment.parent_slab_id;
@@ -159,17 +209,64 @@ impl<'c> PathTwo<'c> {
         f(segments_iter)
     }
 
+    pub fn to_vec(&self) -> Vec<Vec<u8>> {
+        let slab = self.ctx.slab.borrow();
+        let mut path = Vec::new();
+        let mut current_id = self.head_slab_id;
+        while let Some(current_segment) = current_id.map(|id| &slab[id]) {
+            path.push(current_segment.bytes.clone());
+            current_id = current_segment.parent_slab_id;
+        }
+
+        path.reverse();
+        path
+    }
+
     pub fn for_children<F, T>(&self, f: F) -> T
     where
         F: FnOnce(ChildPathsIter) -> T,
     {
         let slab = self.ctx.slab.borrow();
-        let segment = slab.get(self.head_slab_id).expect("ids must be valid");
+        let root_children = self.ctx.root_children_slab_ids.borrow();
+        let children_vec = if let Some(segment_id) = self.head_slab_id {
+            &slab[segment_id].children_slab_ids
+        } else {
+            root_children.as_ref()
+        };
         let paths_iter: ChildPathsIter = iter::repeat(self.ctx)
-            .zip(segment.children_slab_ids.iter())
+            .zip(children_vec.iter())
             .map(id_to_path);
 
         f(paths_iter)
+    }
+
+    pub fn for_each_descendant_recursively<F>(&self, f: F)
+    where
+        F: Fn(PathTwo),
+    {
+        let slab = self.ctx.slab.borrow();
+        let root_children = self.ctx.root_children_slab_ids.borrow();
+
+        let mut descendant_paths: VecDeque<_> = if let Some(segment_id) = self.head_slab_id {
+            &slab[segment_id].children_slab_ids
+        } else {
+            root_children.as_ref()
+        }
+        .iter()
+        .map(|id| id_to_path((self.ctx, id)))
+        .collect();
+
+        while let Some(desc_path) = descendant_paths.pop_front() {
+            descendant_paths.extend(
+                slab[desc_path
+                    .head_slab_id
+                    .expect("child vectors can't contain root node")]
+                .children_slab_ids
+                .iter()
+                .map(|id| id_to_path((self.ctx, id))),
+            );
+            f(desc_path);
+        }
     }
 }
 
@@ -186,7 +283,7 @@ fn id_to_segment((slab, id): (&Slab<PathSegment>, SegmentId)) -> &PathSegment {
 
 fn id_to_path<'a, 's>((ctx, id): (&'s PathCtx, &'a SegmentId)) -> PathTwo<'s> {
     PathTwo {
-        head_slab_id: *id,
+        head_slab_id: Some(*id),
         ctx,
     }
 }
@@ -198,21 +295,22 @@ mod tests {
     #[test]
     fn segment_reuse() {
         let ctx = PathCtx::new();
-        let sub_1 = ctx.get_root().child(b"key1");
-        let sub_2 = sub_1.child(b"key2");
-        let sub_2_again = sub_1.child(b"key2");
+        let sub_1 = ctx.get_root().child(b"key1".to_vec());
+        let sub_2 = sub_1.child(b"key2".to_vec());
+        let sub_2_again = sub_1.child(b"key2".to_vec());
         assert_eq!(sub_2.head_slab_id, sub_2_again.head_slab_id);
     }
 
     #[test]
     fn children_ids() {
         let ctx = PathCtx::new();
-        let sub_1 = ctx.get_root().child(b"key1");
-        sub_1.child(b"key2");
-        sub_1.child(b"key3");
+        let sub_1 = ctx.get_root().child(b"key1".to_vec());
+        sub_1.child(b"key2".to_vec());
+        sub_1.child(b"key3".to_vec());
         let mut children: Vec<Vec<u8>> = Vec::new();
         sub_1.for_children(|children_iter| {
-            children.extend(children_iter.map(|p| p.for_last_segment(|k| k.bytes().to_vec())))
+            children
+                .extend(children_iter.map(|p| p.for_last_segment(|k| k.bytes().to_vec()).unwrap()))
         });
         assert_eq!(children, vec![b"key2", b"key3"]);
     }
@@ -222,10 +320,10 @@ mod tests {
         let ctx = PathCtx::new();
         let path = ctx
             .get_root()
-            .child(b"key1")
-            .child(b"key2")
-            .child(b"key3")
-            .child(b"key4");
+            .child(b"key1".to_vec())
+            .child(b"key2".to_vec())
+            .child(b"key3".to_vec())
+            .child(b"key4".to_vec());
         let mut path_vec = Vec::new();
         path.for_segments(|segments_iter| {
             path_vec = segments_iter
@@ -233,6 +331,20 @@ mod tests {
                 .collect()
         });
         assert_eq!(path_vec, vec![b"key1", b"key2", b"key3", b"key4"]);
-        assert_eq!(path.for_last_segment(|k| k.level), 4);
+        assert_eq!(path.level(), 4);
+    }
+
+    #[test]
+    fn collect_for_root() {
+        let ctx = PathCtx::new();
+        let path = ctx.get_root();
+        let mut path_vec = Vec::new();
+        path.for_segments(|segments_iter| {
+            path_vec = segments_iter
+                .map(|segment| segment.bytes().to_vec())
+                .collect()
+        });
+        assert_eq!(path_vec, Vec::<Vec<u8>>::new());
+        assert_eq!(path.level(), 0);
     }
 }

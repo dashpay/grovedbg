@@ -3,16 +3,15 @@ pub(crate) mod path_display;
 
 use std::{
     cell::{RefCell, RefMut},
-    cmp,
     collections::{BTreeMap, BTreeSet, HashSet},
-    ops::{Deref, DerefMut},
+    mem,
 };
 
 use eframe::{egui, epaint::Pos2};
 
 use self::{
     alignment::{expanded_subtree_dimentions, COLLAPSED_SUBTREE_HEIGHT, COLLAPSED_SUBTREE_WIDTH},
-    path_display::PathTwo,
+    path_display::{PathCtx, PathTwo},
 };
 use crate::ui::DisplayVariant;
 
@@ -61,51 +60,54 @@ pub(crate) type KeySlice<'a> = &'a [u8];
 //     }
 // }
 
-// #[derive(Clone, Copy)]
-// struct SetVisibility<'a, 'c> {
-//     tree: &'a Tree<'c>,
-//     path: &'a Path,
-// }
-
-// impl<'a, 'c> SetVisibility<'a, 'c> {
-//     pub(crate) fn set_visible(&self, key: KeySlice, visible: bool) {
-//         let mut path = self.path.clone();
-//         path.push(key.to_owned());
-//         if let Some(subtree) = self.tree.get_subtree(&path) {
-//             subtree.subtree().set_visible(visible);
-
-//             if !visible {
-//                 self.tree
-//                     .subtrees
-//                     .range::<Path, _>(&path..)
-//                     .filter(|(p, _)| p.starts_with(&path))
-//                     .for_each(|(_, s)| {
-//                         s.set_visible(false);
-//                     });
-//             }
-//         }
-//     }
-
-//     pub(crate) fn visible(&self, key: KeySlice) -> bool {
-//         let mut path = self.path.clone();
-//         path.push(key.to_owned());
-//         self.tree
-//             .get_subtree(&path)
-//             .map(|subtree| subtree.subtree().visible())
-//             .unwrap_or_default()
-//     }
-// }
-
-/// Structure that holds the currently known state of GroveDB.
-#[derive(Debug, Default)]
-pub(crate) struct Tree<'c> {
-    pub(crate) subtrees: BTreeMap<PathTwo<'c>, Subtree>,
-    pub(crate) levels_dimentions: RefCell<Vec<(f32, f32)>>,
+#[derive(Clone, Copy)]
+struct SetVisibility<'t, 'c> {
+    tree: &'t Tree<'c>,
+    path: PathTwo<'c>,
 }
 
-impl Tree<'_> {
-    pub(crate) fn new() -> Self {
-        Default::default()
+impl<'t, 'c> SetVisibility<'t, 'c> {
+    pub(crate) fn set_visible(&self, key: KeySlice, visible: bool) {
+        let path = self.path.child(key.to_vec());
+        if let Some(subtree) = self.tree.get_subtree(&path) {
+            subtree.subtree().set_visible(visible);
+
+            if !visible {
+                path.for_each_descendant_recursively(|desc_path| {
+                    self.tree
+                        .subtrees
+                        .get(&desc_path)
+                        .iter()
+                        .for_each(|subtree| subtree.set_visible(false));
+                });
+            }
+        }
+    }
+
+    pub(crate) fn visible(&self, key: KeySlice) -> bool {
+        let path = self.path.child(key.to_vec());
+        self.tree
+            .get_subtree(&path)
+            .map(|subtree| subtree.subtree().visible())
+            .unwrap_or_default()
+    }
+}
+
+/// Structure that holds the currently known state of GroveDB.
+#[derive(Debug)]
+pub(crate) struct Tree<'c> {
+    pub(crate) subtrees: BTreeMap<PathTwo<'c>, Subtree<'c>>,
+    pub(crate) levels_dimentions: RefCell<Vec<(f32, f32)>>,
+    pub(crate) path_ctx: &'c PathCtx,
+}
+
+impl<'c> Tree<'c> {
+    pub(crate) fn new(path_ctx: &'c PathCtx) -> Self {
+        Self {
+            subtrees: Default::default(),
+            levels_dimentions: Default::default(),
+            path_ctx,
+        }
     }
 
     pub(crate) fn update_dimensions(&self) {
@@ -139,36 +141,42 @@ impl Tree<'_> {
 
     pub(crate) fn set_root(&mut self, root_key: Key) {
         self.subtrees
-            .entry(vec![].into())
+            .entry(self.path_ctx.get_root())
             .or_default()
             .set_root(root_key)
             .set_visible(true);
     }
 
-    pub(crate) fn iter_subtrees(&self) -> impl ExactSizeIterator<Item = SubtreeCtx> {
+    pub(crate) fn iter_subtrees<'t>(&'t self) -> impl ExactSizeIterator<Item = SubtreeCtx<'t, 'c>> {
         self.subtrees.iter().map(|(path, subtree)| SubtreeCtx {
-            path,
+            path: *path,
             subtree,
-            set_child_visibility: SetVisibility { tree: self, path },
+            set_child_visibility: SetVisibility {
+                tree: self,
+                path: path.clone(),
+            },
         })
     }
 
-    pub(crate) fn get_node(&self, path: &Path, key: KeySlice) -> Option<&Node> {
+    pub(crate) fn get_node<'a>(&'a self, path: &PathTwo<'c>, key: KeySlice) -> Option<&'a Node> {
         self.subtrees
             .get(path)
             .map(|subtree| subtree.nodes.get(key))
             .flatten()
     }
 
-    pub(crate) fn get_subtree<'a>(&'a self, path: &'a Path) -> Option<SubtreeCtx> {
+    pub(crate) fn get_subtree<'a>(&'a self, path: &PathTwo<'c>) -> Option<SubtreeCtx> {
         self.subtrees.get(path).map(|subtree| SubtreeCtx {
             subtree,
-            path,
-            set_child_visibility: SetVisibility { tree: self, path },
+            path: *path,
+            set_child_visibility: SetVisibility {
+                tree: self,
+                path: path.clone(),
+            },
         })
     }
 
-    pub(crate) fn insert(&mut self, path: Path, key: Key, node: Node) {
+    pub(crate) fn insert(&mut self, path: PathTwo<'c>, key: Key, node: Node<'c>) {
         {
             let mut state = node.ui_state.borrow_mut();
             state.key_display_variant = DisplayVariant::guess(&key);
@@ -183,8 +191,7 @@ impl Tree<'_> {
         // If a new node inserted represents another subtree, it shall also be added;
         // Root node info is updated as well
         if let Element::Sumtree { root_key, .. } | Element::Subtree { root_key } = &node.element {
-            let mut child_path = path.clone();
-            child_path.push(key.clone());
+            let child_path = path.child(key.clone());
 
             let child_subtree = self.subtrees.entry(child_path).or_default();
             if let Some(root_key) = root_key {
@@ -198,7 +205,7 @@ impl Tree<'_> {
             .insert(key, node);
     }
 
-    pub(crate) fn remove(&mut self, path: &Path, key: KeySlice) {
+    pub(crate) fn remove(&mut self, path: &PathTwo<'c>, key: KeySlice) {
         if let Some(subtree) = self.subtrees.get_mut(path) {
             subtree.remove(key);
         }
@@ -208,24 +215,22 @@ impl Tree<'_> {
     /// an according subtree entry must exists, that means if there is a parent
     /// subtree with a node representing the root node of the deletion
     /// subject then in won't be deleted completely.
-    pub(crate) fn clear_subtree(&mut self, path: &Path) {
-        if let Some(subtree) = self.subtrees.get_mut(path) {
+    pub(crate) fn clear_subtree(&mut self, path: PathTwo<'c>) {
+        if let Some(subtree) = self.subtrees.get_mut(&path) {
             subtree.nodes.clear();
         }
     }
 
-    /// For a given path ensures all subtrees exist and each of them contains a
-    /// node for a child subtree, all missing parts will be created.
-    fn populate_subtrees_chain(&mut self, path: Path) {
-        (0..=path.len()).for_each(|depth| {
-            let subtree = self
-                .subtrees
-                .entry(path.0[0..depth].to_vec().into())
-                .or_default();
-            if depth < path.len() {
-                subtree.insert_not_exists(path[depth].clone(), Node::new_subtree_pacehodler())
-            }
-        });
+    /// For a given path ensures all parent subtrees exist and each of them
+    /// contains a node for a child subtree, all missing parts will be
+    /// created.
+    fn populate_subtrees_chain(&mut self, path: PathTwo<'c>) {
+        let mut current = path.parent_with_key();
+        while let Some((parent, parent_key)) = current {
+            let subtree = self.subtrees.entry(parent).or_default();
+            subtree.insert_not_exists(parent_key, Node::new_subtree_pacehodler());
+            current = parent.parent_with_key();
+        }
     }
 }
 
@@ -248,7 +253,7 @@ pub(crate) struct SubtreeUiState {
 /// Subtree holds all the info about one specific subtree of GroveDB
 #[derive(Debug, Default)]
 #[cfg_attr(test, derive(PartialEq))]
-pub(crate) struct Subtree {
+pub(crate) struct Subtree<'c> {
     /// Actual root node of a subtree, may be unknown yet since it requires a
     /// parent subtree to tell, or a tree could be empty
     pub(crate) root_node: Option<Key>,
@@ -259,7 +264,7 @@ pub(crate) struct Subtree {
     /// keep these "local" roots.
     cluster_roots: BTreeSet<Key>,
     /// All fetched subtree nodes
-    pub(crate) nodes: BTreeMap<Key, Node>,
+    pub(crate) nodes: BTreeMap<Key, Node<'c>>,
     /// Subtree nodes' keys to keep track of nodes that are not yet fetched but
     /// referred by parent node
     waitlist: HashSet<Key>,
@@ -267,7 +272,7 @@ pub(crate) struct Subtree {
     ui_state: RefCell<SubtreeUiState>,
 }
 
-impl Subtree {
+impl<'c> Subtree<'c> {
     pub(crate) fn is_empty(&self) -> bool {
         self.nodes.is_empty()
     }
@@ -481,7 +486,7 @@ impl Subtree {
 
     /// Insert a node into the subtree that doesn't necessarily connected to the
     /// current state.
-    fn insert(&mut self, key: Key, node: Node) {
+    fn insert(&mut self, key: Key, node: Node<'c>) {
         self.remove(&key);
 
         // There are three cases for a node:
@@ -529,7 +534,7 @@ impl Subtree {
         self.nodes.insert(key, node);
     }
 
-    fn insert_not_exists(&mut self, key: Key, node: Node) {
+    fn insert_not_exists(&mut self, key: Key, node: Node<'c>) {
         if !self.nodes.contains_key(&key) {
             self.insert(key, node);
         }
@@ -538,13 +543,13 @@ impl Subtree {
 
 /// A wrapper type to guarantee that the subtree has the specified path.
 #[derive(Clone, Copy)]
-pub(crate) struct SubtreeCtx<'a> {
-    subtree: &'a Subtree,
-    path: &'a Path,
-    set_child_visibility: SetVisibility<'a>,
+pub(crate) struct SubtreeCtx<'t, 'c> {
+    subtree: &'t Subtree<'c>,
+    path: PathTwo<'c>,
+    set_child_visibility: SetVisibility<'t, 'c>,
 }
 
-impl<'a> SubtreeCtx<'a> {
+impl<'a, 'c> SubtreeCtx<'a, 'c> {
     pub(crate) fn set_child_visibility(&self, key: KeySlice<'a>, visible: bool) {
         self.set_child_visibility.set_visible(key, visible)
     }
@@ -567,8 +572,8 @@ impl<'a> SubtreeCtx<'a> {
         self.set_child_visibility.visible(key)
     }
 
-    pub(crate) fn get_node(&self, key: KeySlice<'a>) -> Option<NodeCtx<'a>> {
-        self.subtree.nodes.get(key).map(|node| NodeCtx {
+    pub(crate) fn get_node(&self, key: Key) -> Option<NodeCtx<'a, 'c>> {
+        self.subtree.nodes.get(&key).map(|node| NodeCtx {
             node,
             path: self.path,
             key,
@@ -576,11 +581,11 @@ impl<'a> SubtreeCtx<'a> {
         })
     }
 
-    pub(crate) fn get_root(&self) -> Option<NodeCtx<'a>> {
+    pub(crate) fn get_root(&self) -> Option<NodeCtx<'a, 'c>> {
         self.subtree
             .root_node
             .as_ref()
-            .map(|key| self.get_node(key))
+            .map(|key| self.get_node(key.to_vec()))
             .flatten()
     }
 
@@ -588,29 +593,19 @@ impl<'a> SubtreeCtx<'a> {
         self.subtree
     }
 
-    pub(crate) fn path(&self) -> &'a Path {
+    pub(crate) fn path(&self) -> PathTwo<'c> {
         self.path
     }
 
-    // pub(crate) fn iter_cluster_roots(&self) -> impl ExactSizeIterator<Item =
-    // NodeCtx> {     self.subtree.cluster_roots.iter().map(|key| NodeCtx {
-    //         node: self
-    //             .subtree
-    //             .nodes
-    //             .get(key)
-    //             .expect("cluster roots and nodes are in sync"),
-    //         path: self.path,
-    //         key,
-    //         subtree_ctx: self.clone(),
-    //     })
-    // }
-
-    pub(crate) fn iter_nodes(&self) -> impl ExactSizeIterator<Item = NodeCtx> {
-        self.subtree.nodes.iter().map(|(key, node)| NodeCtx {
+    pub(crate) fn iter_nodes(&self) -> impl ExactSizeIterator<Item = NodeCtx<'a, 'c>> {
+        let subtree: &'a Subtree<'c> = self.subtree;
+        let path: PathTwo<'c> = self.path;
+        let subtree_ctx: SubtreeCtx<'a, 'c> = self.clone();
+        subtree.nodes.iter().map(move |(key, node)| NodeCtx {
             node,
-            path: self.path,
-            key,
-            subtree_ctx: self.clone(),
+            path,
+            key: key.clone(),
+            subtree_ctx,
         })
     }
 
@@ -620,41 +615,41 @@ impl<'a> SubtreeCtx<'a> {
 }
 
 /// A wrapper type to guarantee that the node has specified path and key.
-#[derive(Clone, Copy)]
-pub(crate) struct NodeCtx<'a> {
-    node: &'a Node,
-    path: &'a Path,
-    key: KeySlice<'a>,
-    subtree_ctx: SubtreeCtx<'a>,
+#[derive(Clone)]
+pub(crate) struct NodeCtx<'a, 'c> {
+    node: &'a Node<'c>,
+    path: PathTwo<'c>,
+    key: Key,
+    subtree_ctx: SubtreeCtx<'a, 'c>,
 }
 
-impl<'a> NodeCtx<'a> {
-    pub(crate) fn path(&self) -> &Path {
+impl<'a, 'c> NodeCtx<'a, 'c> {
+    pub(crate) fn path(&self) -> PathTwo {
         self.path
     }
 
     pub(crate) fn key(&self) -> KeySlice {
-        self.key
+        &self.key
     }
 
-    pub(crate) fn split(self) -> (&'a Node, &'a Path, KeySlice<'a>) {
-        (self.node, self.path, self.key)
-    }
+    // pub(crate) fn split(&self) -> (&'a Node<'a>, PathTwo<'a>, KeySlice) {
+    //     (self.node, self.path, &self.key)
+    // }
 
-    pub(crate) fn node(&self) -> &Node {
+    pub(crate) fn node(&self) -> &'a Node<'c> {
         self.node
     }
 
-    pub(crate) fn subtree(&self) -> &Subtree {
+    pub(crate) fn subtree(&self) -> &'a Subtree {
         self.subtree_ctx.subtree
     }
 
-    pub(crate) fn subtree_ctx(&self) -> SubtreeCtx {
+    pub(crate) fn subtree_ctx(&self) -> SubtreeCtx<'a, 'c> {
         self.subtree_ctx
     }
 
     pub(crate) fn egui_id(&self) -> egui::Id {
-        egui::Id::new(("node", self.path, self.key))
+        egui::Id::new(("node", self.path, &self.key))
     }
 
     pub(crate) fn set_left_visible(&self) {
@@ -681,15 +676,15 @@ pub(crate) struct NodeUiState {
 
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(test, derive(PartialEq))]
-pub(crate) struct Node {
-    pub(crate) element: Element,
+pub(crate) struct Node<'c> {
+    pub(crate) element: Element<'c>,
     pub(crate) left_child: Option<Key>,
     pub(crate) right_child: Option<Key>,
     pub(crate) ui_state: RefCell<NodeUiState>,
 }
 
-impl Node {
-    pub(crate) fn new_element(element: Element) -> Self {
+impl<'c> Node<'c> {
+    pub(crate) fn new_element(element: Element<'c>) -> Self {
         Node {
             element,
             ..Default::default()
@@ -710,7 +705,7 @@ impl Node {
         }
     }
 
-    pub(crate) fn new_reference(path: Path, key: Key) -> Self {
+    pub(crate) fn new_reference(path: PathTwo<'c>, key: Key) -> Self {
         Node {
             element: Element::Reference { path, key },
             ..Default::default()
@@ -750,14 +745,14 @@ impl Node {
 }
 
 /// A value that a subtree's node hold
-#[derive(Debug, Clone, Default, PartialEq, strum::EnumIter, strum::AsRefStr)]
-pub(crate) enum Element {
+#[derive(Debug, Clone, Default, PartialEq, strum::AsRefStr)]
+pub(crate) enum Element<'c> {
     /// Scalar value, arbitrary bytes
     Item { value: Vec<u8> },
     /// Subtree item that will be summed in a sumtree that contains it
     SumItem { value: i64 },
     /// Reference to another (or the same) subtree's node
-    Reference { path: Path, key: Key },
+    Reference { path: PathTwo<'c>, key: Key },
     /// A link to a deeper level subtree which accumulates a sum of its sum
     /// items, `None` indicates an empty subtree
     Sumtree { root_key: Option<Key>, sum: i64 },
