@@ -1,10 +1,15 @@
+use std::borrow::Borrow;
+
 use eframe::{
     egui,
     epaint::{Color32, Stroke},
 };
 use tokio::sync::mpsc::Sender;
 
-use super::common::{binary_label, bytes_by_display_variant, path_label};
+use super::{
+    common::{binary_label, bytes_by_display_variant, path_label},
+    DisplayVariant,
+};
 use crate::{
     fetch::Message,
     model::{Element, NodeCtx},
@@ -33,11 +38,10 @@ pub(crate) fn draw_node<'a, 'c>(
                 }
             });
 
-            binary_label(
-                ui,
-                &node_ctx.key(),
-                &mut node_ctx.node().ui_state.borrow_mut().key_display_variant,
-            );
+            node_ctx.with_key_display_variant(|display_variant| {
+                binary_label(ui, &node_ctx.key(), display_variant);
+            });
+
             draw_element(ui, node_ctx);
 
             ui.horizontal(|footer| {
@@ -95,11 +99,7 @@ pub(crate) fn draw_element(ui: &mut egui::Ui, node_ctx: &NodeCtx) {
             ui.label(format!("Value: {value}"));
         }
         Element::Reference { path, key } => {
-            path_label(
-                ui,
-                *path,
-                &mut node.ui_state.borrow_mut().item_display_variant,
-            );
+            path_label(ui, *path);
             ui.horizontal(|line| {
                 line.add_space(20.0);
                 line.label(bytes_by_display_variant(

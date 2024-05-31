@@ -2,6 +2,7 @@ pub(crate) mod alignment;
 pub(crate) mod path_display;
 
 use std::{
+    borrow::BorrowMut,
     cell::{RefCell, RefMut},
     collections::{BTreeMap, BTreeSet, HashSet},
     mem,
@@ -630,6 +631,23 @@ impl<'a, 'c> NodeCtx<'a, 'c> {
 
     pub(crate) fn key(&self) -> KeySlice {
         &self.key
+    }
+
+    pub(crate) fn with_key_display_variant<T>(
+        &self,
+        f: impl FnOnce(&mut DisplayVariant) -> T,
+    ) -> T {
+        if matches!(
+            self.node.element,
+            Element::Subtree { .. } | Element::Sumtree { .. }
+        ) {
+            self.path
+                .child(self.key.clone())
+                .for_display_mut(f)
+                .expect("not a root path")
+        } else {
+            f(&mut self.node.ui_state.borrow_mut().key_display_variant)
+        }
     }
 
     // pub(crate) fn split(&self) -> (&'a Node<'a>, PathTwo<'a>, KeySlice) {

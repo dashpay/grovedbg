@@ -193,6 +193,23 @@ impl<'c> PathTwo<'c> {
         });
     }
 
+    pub fn get_display_variant(&self) -> Option<DisplayVariant> {
+        self.head_slab_id.map(|id| {
+            let mut slab = self.ctx.slab.borrow_mut();
+            let segment = &mut slab[id];
+            segment.display
+        })
+    }
+
+    pub fn for_display_mut<T>(&self, f: impl FnOnce(&mut DisplayVariant) -> T) -> Option<T> {
+        if let Some(id) = self.head_slab_id {
+            let mut slab = self.ctx.slab.borrow_mut();
+            Some(f(&mut slab[id].display))
+        } else {
+            None
+        }
+    }
+
     pub fn for_segments<F, T>(&self, f: F) -> T
     where
         F: FnOnce(SegmentsIter) -> T,

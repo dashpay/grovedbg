@@ -10,6 +10,7 @@ use tokio::sync::mpsc::Sender;
 use super::{
     common::{binary_label_colored, path_label},
     node::{draw_element, draw_node, element_to_color},
+    DisplayVariant,
 };
 use crate::{
     fetch::Message,
@@ -242,11 +243,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                             |ui| ui.separator(),
                         );
 
-                        path_label(
-                            ui,
-                            subtree_ctx.path(),
-                            &mut subtree.path_display_variant_mut(),
-                        );
+                        path_label(ui, subtree_ctx.path());
 
                         ui.allocate_ui(
                             egui::Vec2 {
@@ -290,12 +287,15 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                                             .set_child_visibility(node_ctx.key(), visibility);
                                     }
                                 }
-                                binary_label_colored(
-                                    key_line,
-                                    node_ctx.key(),
-                                    &mut node_ctx.node().ui_state.borrow_mut().key_display_variant,
-                                    color,
-                                );
+
+                                node_ctx.with_key_display_variant(|display_variant| {
+                                    binary_label_colored(
+                                        key_line,
+                                        node_ctx.key(),
+                                        display_variant,
+                                        color,
+                                    )
+                                })
                             });
 
                             if matches!(

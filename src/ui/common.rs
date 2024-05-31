@@ -110,11 +110,7 @@ impl DisplayVariant {
     }
 }
 
-pub(crate) fn path_label<'a>(
-    ui: &mut egui::Ui,
-    path: PathTwo<'a>,
-    display_variant: &mut DisplayVariant,
-) -> egui::Response {
+pub(crate) fn path_label<'a>(ui: &mut egui::Ui, path: PathTwo<'a>) -> egui::Response {
     path.for_segments(|mut iter| {
         if let Some(key) = iter.next_back() {
             let mut text = String::from("[");
@@ -122,26 +118,32 @@ pub(crate) fn path_label<'a>(
                 if iter.next_back().is_some() {
                     text.push_str("..., ");
                 }
-                text.push_str(&bytes_by_display_variant(parent.bytes(), display_variant));
+                text.push_str(&bytes_by_display_variant(parent.bytes(), &parent.display()));
                 text.push_str(", ");
             }
 
-            text.push_str(&bytes_by_display_variant(key.bytes(), display_variant));
+            text.push_str(&bytes_by_display_variant(key.bytes(), &key.display()));
             text.push_str("]");
 
-            let response =
-                display_variant_dropdown(ui, &text, display_variant, Color32::LIGHT_GRAY);
+            let response = ui.label(text);
+            // display_variant_dropdown(ui, &text, display_variant, Color32::LIGHT_GRAY);
 
             response.on_hover_ui_at_pointer(|hover_ui| {
                 let mut text = String::from("[");
                 path.for_segments(|mut iter| {
                     let last = iter.next_back();
                     iter.for_each(|segment| {
-                        text.push_str(&bytes_by_display_variant(segment.bytes(), display_variant));
+                        text.push_str(&bytes_by_display_variant(
+                            segment.bytes(),
+                            &segment.display(),
+                        ));
                         text.push_str(", ");
                     });
                     last.into_iter().for_each(|segment| {
-                        text.push_str(&bytes_by_display_variant(segment.bytes(), display_variant));
+                        text.push_str(&bytes_by_display_variant(
+                            segment.bytes(),
+                            &segment.display(),
+                        ));
                         text.push_str("]");
                     });
                     hover_ui.label(text);

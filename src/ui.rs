@@ -23,7 +23,7 @@ use crate::model::Element;
 //                     ui.style_mut().wrap = Some(false);
 //                     Element::iter().for_each(|element| {
 //                         ui.label(
-//                             
+//
 // egui::RichText::new(element.as_ref()).color(element_to_color(&element)),
 //                         );
 //                     });
