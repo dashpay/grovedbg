@@ -1,5 +1,4 @@
 use std::{
-    borrow::BorrowMut,
     cell::RefCell,
     collections::VecDeque,
     fmt,
@@ -32,14 +31,14 @@ impl PathCtx {
         }
     }
 
-    pub fn get_root(&self) -> PathTwo {
-        PathTwo {
+    pub fn get_root(&self) -> Path {
+        Path {
             head_slab_id: None,
             ctx: self,
         }
     }
 
-    pub fn add_path(&self, path: Vec<Vec<u8>>) -> PathTwo {
+    pub fn add_path(&self, path: Vec<Vec<u8>>) -> Path {
         let mut current_path = self.get_root();
         for segment in path.into_iter() {
             current_path = current_path.child(segment);
@@ -67,60 +66,60 @@ impl PathSegment {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct PathTwo<'c> {
+pub(crate) struct Path<'c> {
     head_slab_id: Option<SegmentId>,
     ctx: &'c PathCtx,
 }
 
-impl Hash for PathTwo<'_> {
+impl Hash for Path<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.for_segments(|segments_iter| segments_iter.for_each(|seg| state.write(seg.bytes())));
     }
 }
 
-impl PartialEq for PathTwo<'_> {
+impl PartialEq for Path<'_> {
     fn eq(&self, other: &Self) -> bool {
         ptr::eq(&self.ctx, &other.ctx) && self.head_slab_id == other.head_slab_id
     }
 }
 
-impl PartialOrd for PathTwo<'_> {
+impl PartialOrd for Path<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.head_slab_id.cmp(&other.head_slab_id))
     }
 }
 
-impl Eq for PathTwo<'_> {}
+impl Eq for Path<'_> {}
 
 // TODO: comparing paths of different slabs makes no sence
-impl Ord for PathTwo<'_> {
+impl Ord for Path<'_> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.partial_cmp(other).expect("paths of different ctxes")
     }
 }
 
-impl<'c> PathTwo<'c> {
+impl<'c> Path<'c> {
     pub fn level(&self) -> usize {
         self.for_last_segment(|k| k.level).unwrap_or_default()
     }
 
-    pub fn parent(&self) -> Option<PathTwo<'c>> {
+    pub fn parent(&self) -> Option<Path<'c>> {
         self.head_slab_id.map(|id| {
             let slab = self.ctx.slab.borrow();
             let segment = &slab[id];
-            PathTwo {
+            Path {
                 head_slab_id: segment.parent_slab_id,
                 ctx: self.ctx,
             }
         })
     }
 
-    pub fn parent_with_key(&self) -> Option<(PathTwo<'c>, Vec<u8>)> {
+    pub fn parent_with_key(&self) -> Option<(Path<'c>, Vec<u8>)> {
         self.head_slab_id.map(|id| {
             let slab = self.ctx.slab.borrow();
             let segment = &slab[id];
             (
-                PathTwo {
+                Path {
                     head_slab_id: segment.parent_slab_id,
                     ctx: self.ctx,
                 },
@@ -129,7 +128,7 @@ impl<'c> PathTwo<'c> {
         })
     }
 
-    pub fn child(&self, key: Vec<u8>) -> PathTwo<'c> {
+    pub fn child(&self, key: Vec<u8>) -> Path<'c> {
         let mut slab = self.ctx.slab.borrow_mut();
         let mut root_children = self.ctx.root_children_slab_ids.borrow_mut();
         let level = self
@@ -147,7 +146,7 @@ impl<'c> PathTwo<'c> {
                 .find(|id| &slab[**id].bytes == &key)
                 .copied()
         } {
-            PathTwo {
+            Path {
                 head_slab_id: Some(child_segment_id),
                 ctx: self.ctx,
             }
@@ -164,7 +163,7 @@ impl<'c> PathTwo<'c> {
                 .map(|id| &mut slab[id].children_slab_ids)
                 .unwrap_or(&mut root_children);
             children_vec.push(child_segment_id);
-            PathTwo {
+            Path {
                 head_slab_id: Some(child_segment_id),
                 ctx: self.ctx,
             }
@@ -259,7 +258,7 @@ impl<'c> PathTwo<'c> {
 
     pub fn for_each_descendant_recursively<F>(&self, f: F)
     where
-        F: Fn(PathTwo),
+        F: Fn(Path),
     {
         let slab = self.ctx.slab.borrow();
         let root_children = self.ctx.root_children_slab_ids.borrow();
@@ -291,15 +290,15 @@ type SegmentsIter<'c> = iter::Rev<std::vec::IntoIter<&'c PathSegment>>;
 
 type ChildPathsIter<'a, 'c> = iter::Map<
     iter::Zip<iter::Repeat<&'c PathCtx>, std::slice::Iter<'a, SegmentId>>,
-    fn((&'c PathCtx, &'a SegmentId)) -> PathTwo<'c>,
+    fn((&'c PathCtx, &'a SegmentId)) -> Path<'c>,
 >;
 
 fn id_to_segment((slab, id): (&Slab<PathSegment>, SegmentId)) -> &PathSegment {
     slab.get(id).expect("ids must be valid")
 }
 
-fn id_to_path<'a, 's>((ctx, id): (&'s PathCtx, &'a SegmentId)) -> PathTwo<'s> {
-    PathTwo {
+fn id_to_path<'a, 's>((ctx, id): (&'s PathCtx, &'a SegmentId)) -> Path<'s> {
+    Path {
         head_slab_id: Some(*id),
         ctx,
     }

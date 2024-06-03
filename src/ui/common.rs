@@ -7,7 +7,7 @@ use eframe::{
     epaint::Color32,
 };
 
-use crate::model::path_display::PathTwo;
+use crate::model::path_display::Path;
 
 const MAX_BYTES: usize = 10;
 const MAX_HEX_LENGTH: usize = 64;
@@ -110,7 +110,7 @@ impl DisplayVariant {
     }
 }
 
-pub(crate) fn path_label<'a>(ui: &mut egui::Ui, path: PathTwo<'a>) -> egui::Response {
+pub(crate) fn path_label<'a>(ui: &mut egui::Ui, path: Path<'a>) -> egui::Response {
     path.for_segments(|mut iter| {
         if let Some(key) = iter.next_back() {
             let mut text = String::from("[");

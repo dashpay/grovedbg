@@ -2,69 +2,25 @@ pub(crate) mod alignment;
 pub(crate) mod path_display;
 
 use std::{
-    borrow::BorrowMut,
     cell::{RefCell, RefMut},
     collections::{BTreeMap, BTreeSet, HashSet},
-    mem,
 };
 
 use eframe::{egui, epaint::Pos2};
 
 use self::{
     alignment::{expanded_subtree_dimentions, COLLAPSED_SUBTREE_HEIGHT, COLLAPSED_SUBTREE_WIDTH},
-    path_display::{PathCtx, PathTwo},
+    path_display::{Path, PathCtx},
 };
 use crate::ui::DisplayVariant;
-
-// #[derive(Debug, PartialEq, Eq, Clone, Default, Hash)]
-// pub(crate) struct Path(pub Vec<Vec<u8>>);
 
 pub(crate) type Key = Vec<u8>;
 pub(crate) type KeySlice<'a> = &'a [u8];
 
-// impl PartialOrd for Path {
-//     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-//         self.0
-//             .len()
-//             .cmp(&other.0.len())
-//             .then_with(|| self.0.cmp(&other.0))
-//             .into()
-//     }
-// }
-
-// impl Ord for Path {
-//     fn cmp(&self, other: &Self) -> cmp::Ordering {
-//         self.0
-//             .len()
-//             .cmp(&other.0.len())
-//             .then_with(|| self.0.cmp(&other.0))
-//     }
-// }
-
-// impl From<Vec<Vec<u8>>> for Path {
-//     fn from(value: Vec<Vec<u8>>) -> Self {
-//         Self(value)
-//     }
-// }
-
-// impl Deref for Path {
-//     type Target = Vec<Vec<u8>>;
-
-//     fn deref(&self) -> &Self::Target {
-//         &self.0
-//     }
-// }
-
-// impl DerefMut for Path {
-//     fn deref_mut(&mut self) -> &mut Self::Target {
-//         &mut self.0
-//     }
-// }
-
 #[derive(Clone, Copy)]
 struct SetVisibility<'t, 'c> {
     tree: &'t Tree<'c>,
-    path: PathTwo<'c>,
+    path: Path<'c>,
 }
 
 impl<'t, 'c> SetVisibility<'t, 'c> {
@@ -97,7 +53,7 @@ impl<'t, 'c> SetVisibility<'t, 'c> {
 /// Structure that holds the currently known state of GroveDB.
 #[derive(Debug)]
 pub(crate) struct Tree<'c> {
-    pub(crate) subtrees: BTreeMap<PathTwo<'c>, Subtree<'c>>,
+    pub(crate) subtrees: BTreeMap<Path<'c>, Subtree<'c>>,
     pub(crate) levels_dimentions: RefCell<Vec<(f32, f32)>>,
     pub(crate) path_ctx: &'c PathCtx,
 }
@@ -159,14 +115,14 @@ impl<'c> Tree<'c> {
         })
     }
 
-    pub(crate) fn get_node<'a>(&'a self, path: &PathTwo<'c>, key: KeySlice) -> Option<&'a Node> {
+    pub(crate) fn get_node<'a>(&'a self, path: &Path<'c>, key: KeySlice) -> Option<&'a Node> {
         self.subtrees
             .get(path)
             .map(|subtree| subtree.nodes.get(key))
             .flatten()
     }
 
-    pub(crate) fn get_subtree<'a>(&'a self, path: &PathTwo<'c>) -> Option<SubtreeCtx> {
+    pub(crate) fn get_subtree<'a>(&'a self, path: &Path<'c>) -> Option<SubtreeCtx> {
         self.subtrees.get(path).map(|subtree| SubtreeCtx {
             subtree,
             path: *path,
@@ -177,7 +133,7 @@ impl<'c> Tree<'c> {
         })
     }
 
-    pub(crate) fn insert(&mut self, path: PathTwo<'c>, key: Key, node: Node<'c>) {
+    pub(crate) fn insert(&mut self, path: Path<'c>, key: Key, node: Node<'c>) {
         {
             let mut state = node.ui_state.borrow_mut();
             state.key_display_variant = DisplayVariant::guess(&key);
@@ -206,7 +162,7 @@ impl<'c> Tree<'c> {
             .insert(key, node);
     }
 
-    pub(crate) fn remove(&mut self, path: &PathTwo<'c>, key: KeySlice) {
+    pub(crate) fn remove(&mut self, path: &Path<'c>, key: KeySlice) {
         if let Some(subtree) = self.subtrees.get_mut(path) {
             subtree.remove(key);
         }
@@ -216,7 +172,7 @@ impl<'c> Tree<'c> {
     /// an according subtree entry must exists, that means if there is a parent
     /// subtree with a node representing the root node of the deletion
     /// subject then in won't be deleted completely.
-    pub(crate) fn clear_subtree(&mut self, path: PathTwo<'c>) {
+    pub(crate) fn clear_subtree(&mut self, path: Path<'c>) {
         if let Some(subtree) = self.subtrees.get_mut(&path) {
             subtree.nodes.clear();
         }
@@ -225,7 +181,7 @@ impl<'c> Tree<'c> {
     /// For a given path ensures all parent subtrees exist and each of them
     /// contains a node for a child subtree, all missing parts will be
     /// created.
-    fn populate_subtrees_chain(&mut self, path: PathTwo<'c>) {
+    fn populate_subtrees_chain(&mut self, path: Path<'c>) {
         let mut current = path.parent_with_key();
         while let Some((parent, parent_key)) = current {
             let subtree = self.subtrees.entry(parent).or_default();
@@ -263,6 +219,7 @@ pub(crate) struct Subtree<'c> {
     /// GroveDb we may occasionally be unaware of all connections, but still
     /// want to know how to draw it. Since we're drawing from roots, we have to
     /// keep these "local" roots.
+    /// TODO: a useless feature perhaps
     cluster_roots: BTreeSet<Key>,
     /// All fetched subtree nodes
     pub(crate) nodes: BTreeMap<Key, Node<'c>>,
@@ -546,7 +503,7 @@ impl<'c> Subtree<'c> {
 #[derive(Clone, Copy)]
 pub(crate) struct SubtreeCtx<'t, 'c> {
     subtree: &'t Subtree<'c>,
-    path: PathTwo<'c>,
+    path: Path<'c>,
     set_child_visibility: SetVisibility<'t, 'c>,
 }
 
@@ -594,13 +551,13 @@ impl<'a, 'c> SubtreeCtx<'a, 'c> {
         self.subtree
     }
 
-    pub(crate) fn path(&self) -> PathTwo<'c> {
+    pub(crate) fn path(&self) -> Path<'c> {
         self.path
     }
 
     pub(crate) fn iter_nodes(&self) -> impl ExactSizeIterator<Item = NodeCtx<'a, 'c>> {
         let subtree: &'a Subtree<'c> = self.subtree;
-        let path: PathTwo<'c> = self.path;
+        let path: Path<'c> = self.path;
         let subtree_ctx: SubtreeCtx<'a, 'c> = self.clone();
         subtree.nodes.iter().map(move |(key, node)| NodeCtx {
             node,
@@ -619,13 +576,13 @@ impl<'a, 'c> SubtreeCtx<'a, 'c> {
 #[derive(Clone)]
 pub(crate) struct NodeCtx<'a, 'c> {
     node: &'a Node<'c>,
-    path: PathTwo<'c>,
+    path: Path<'c>,
     key: Key,
     subtree_ctx: SubtreeCtx<'a, 'c>,
 }
 
 impl<'a, 'c> NodeCtx<'a, 'c> {
-    pub(crate) fn path(&self) -> PathTwo {
+    pub(crate) fn path(&self) -> Path {
         self.path
     }
 
@@ -723,7 +680,7 @@ impl<'c> Node<'c> {
         }
     }
 
-    pub(crate) fn new_reference(path: PathTwo<'c>, key: Key) -> Self {
+    pub(crate) fn new_reference(path: Path<'c>, key: Key) -> Self {
         Node {
             element: Element::Reference { path, key },
             ..Default::default()
@@ -770,7 +727,7 @@ pub(crate) enum Element<'c> {
     /// Subtree item that will be summed in a sumtree that contains it
     SumItem { value: i64 },
     /// Reference to another (or the same) subtree's node
-    Reference { path: PathTwo<'c>, key: Key },
+    Reference { path: Path<'c>, key: Key },
     /// A link to a deeper level subtree which accumulates a sum of its sum
     /// items, `None` indicates an empty subtree
     Sumtree { root_key: Option<Key>, sum: i64 },

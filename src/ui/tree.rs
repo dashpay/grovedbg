@@ -16,7 +16,7 @@ use crate::{
     fetch::Message,
     model::{
         alignment::{COLLAPSED_SUBTREE_WIDTH, NODE_HEIGHT},
-        path_display::PathTwo,
+        path_display::Path,
         Element, Key, KeySlice, Node, NodeCtx, SubtreeCtx, Tree,
     },
 };
@@ -27,7 +27,7 @@ pub(crate) struct TreeDrawer<'u, 't, 'c> {
     ui: &'u mut egui::Ui,
     transform: TSTransform,
     rect: Rect,
-    references: Vec<(Pos2, PathTwo<'t>, Key)>,
+    references: Vec<(Pos2, Path<'t>, Key)>,
     tree: &'t Tree<'c>,
     sender: &'t Sender<Message>,
 }
@@ -266,7 +266,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                                 if subtree_ctx.path() != *ref_path {
                                     let point = subtree.get_subtree_output_point();
                                     let key = ref_key.clone();
-                                    let path: PathTwo<'c> = *ref_path;
+                                    let path: Path<'c> = *ref_path;
                                     self.references.push((point, path, key));
                                 }
                             }
