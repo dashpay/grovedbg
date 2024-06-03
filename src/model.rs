@@ -112,6 +112,7 @@ impl<'c> Tree<'c> {
                 tree: self,
                 path: path.clone(),
             },
+            tree: self,
         })
     }
 
@@ -130,6 +131,7 @@ impl<'c> Tree<'c> {
                 tree: self,
                 path: path.clone(),
             },
+            tree: self,
         })
     }
 
@@ -497,6 +499,16 @@ impl<'c> Subtree<'c> {
             self.insert(key, node);
         }
     }
+
+    fn iter_subtree_keys(&self) -> impl Iterator<Item = &Key> {
+        self.nodes.iter().filter_map(|(key, node)| {
+            matches!(
+                node.element,
+                Element::Sumtree { .. } | Element::Subtree { .. }
+            )
+            .then(|| key)
+        })
+    }
 }
 
 /// A wrapper type to guarantee that the subtree has the specified path.
@@ -505,9 +517,25 @@ pub(crate) struct SubtreeCtx<'t, 'c> {
     subtree: &'t Subtree<'c>,
     path: Path<'c>,
     set_child_visibility: SetVisibility<'t, 'c>,
+    tree: &'t Tree<'c>,
 }
 
 impl<'a, 'c> SubtreeCtx<'a, 'c> {
+    pub(crate) fn iter_subtrees(&self) -> impl Iterator<Item = SubtreeCtx<'a, 'c>> + '_ {
+        self.subtree.iter_subtree_keys().map(|key| {
+            let path = self.path.child(key.to_vec());
+            SubtreeCtx {
+                subtree: &self.tree.subtrees[&path],
+                path,
+                set_child_visibility: SetVisibility {
+                    tree: self.tree,
+                    path,
+                },
+                tree: self.tree,
+            }
+        })
+    }
+
     pub(crate) fn set_child_visibility(&self, key: KeySlice<'a>, visible: bool) {
         self.set_child_visibility.set_visible(key, visible)
     }

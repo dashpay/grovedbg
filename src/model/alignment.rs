@@ -1,13 +1,13 @@
 //! Nodes/Subtrees alignment implementation.
 
-use super::Subtree;
+use super::{Subtree, SubtreeCtx};
 
 const NODE_WIDTH: f32 = 150.;
 pub(crate) const NODE_HEIGHT: f32 = 200.;
 pub(crate) const COLLAPSED_SUBTREE_WIDTH: f32 = 400.;
 pub(crate) const COLLAPSED_SUBTREE_HEIGHT: f32 = 600.;
 
-fn leaves_level_count(n_levels: u32) -> u32 {
+pub(crate) fn leaves_level_count(n_levels: u32) -> u32 {
     if n_levels > 0 {
         2u32.pow(n_levels - 1)
     } else {
