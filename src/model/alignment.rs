@@ -50,6 +50,36 @@ pub(super) fn expanded_subtree_dimentions(subtree: &Subtree) -> (f32, f32, u32, 
     }
 }
 
+type Levels = usize;
+
+pub(super) fn expanded_subtree_levels(subtree: &Subtree) -> Levels {
+    if let Some(root_node) = subtree.root_node() {
+        let mut queue = vec![(1, root_node)];
+        let mut levels = 0;
+        while let Some((level, node)) = queue.pop() {
+            levels = levels.max(level);
+            let state = node.ui_state.borrow();
+            state
+                .show_left
+                .then_some(node.left_child.as_ref())
+                .flatten()
+                .and_then(|key| subtree.nodes.get(key))
+                .into_iter()
+                .for_each(|node| queue.push((level + 1, node)));
+            state
+                .show_right
+                .then_some(node.right_child.as_ref())
+                .flatten()
+                .and_then(|key| subtree.nodes.get(key))
+                .into_iter()
+                .for_each(|node| queue.push((level + 1, node)));
+        }
+        levels as Levels
+    } else {
+        0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

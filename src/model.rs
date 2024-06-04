@@ -3,13 +3,14 @@ pub(crate) mod path_display;
 
 use std::{
     cell::{RefCell, RefMut},
+    cmp,
     collections::{BTreeMap, BTreeSet, HashSet},
 };
 
 use eframe::{egui, epaint::Pos2};
 
 use self::{
-    alignment::{expanded_subtree_dimentions, COLLAPSED_SUBTREE_HEIGHT, COLLAPSED_SUBTREE_WIDTH},
+    alignment::{expanded_subtree_levels, leaves_level_count},
     path_display::{Path, PathCtx},
 };
 use crate::ui::DisplayVariant;
@@ -54,7 +55,7 @@ impl<'t, 'c> SetVisibility<'t, 'c> {
 #[derive(Debug)]
 pub(crate) struct Tree<'c> {
     pub(crate) subtrees: BTreeMap<Path<'c>, Subtree<'c>>,
-    pub(crate) levels_dimentions: RefCell<Vec<(f32, f32)>>,
+    pub(crate) levels_heights: RefCell<Vec<Height>>,
     pub(crate) path_ctx: &'c PathCtx,
 }
 
@@ -62,37 +63,50 @@ impl<'c> Tree<'c> {
     pub(crate) fn new(path_ctx: &'c PathCtx) -> Self {
         Self {
             subtrees: Default::default(),
-            levels_dimentions: Default::default(),
+            levels_heights: Default::default(),
             path_ctx,
         }
     }
 
     pub(crate) fn update_dimensions(&self) {
-        for (path, subtree) in self.subtrees.iter() {
-            if !subtree.visible() {
+        let mut levels_heights = self.levels_heights.borrow_mut();
+        let mut subtrees_iter = self.iter_subtrees().rev().peekable();
+        let levels_count = subtrees_iter
+            .peek()
+            .map(|ctx| ctx.path().level())
+            .unwrap_or_default();
+
+        *levels_heights = vec![0; levels_count + 1];
+
+        for subtree_ctx in subtrees_iter {
+            if !subtree_ctx.subtree.visible() {
                 continue;
             }
 
-            subtree.ui_state.borrow_mut().children_width = 0.;
-            let mut levels_height = self.levels_dimentions.borrow_mut();
-            if levels_height.len() < path.level() + 1 {
-                levels_height.push(Default::default());
-            }
-            levels_height[path.level()].0 = 0.0;
+            let height = subtree_ctx.update_dimensions();
+            let level = subtree_ctx.path().level();
+            levels_heights[level] = cmp::max(levels_heights[level], height);
 
-            let (width, height) = subtree.update_base_dimensions();
-            // Propagate width to parent subtrees
-            let mut current_parent = path.parent();
-            while let Some((parent_path, parent)) = current_parent
-                .map(|p| self.subtrees.get(&p).map(|s| (p, s)))
-                .flatten()
-            {
-                parent.ui_state.borrow_mut().children_width += width;
-                levels_height[parent_path.level()].0 += width;
-                current_parent = parent_path.parent();
-            }
+            // subtree.ui_state.borrow_mut().children_width = 0.;
+            // if levels_height.len() < path.level() + 1 {
+            //     levels_height.push(Default::default());
+            // }
+            // levels_height[path.level()].0 = 0.0;
 
-            levels_height[path.level()].1 = levels_height[path.level()].1.max(height);
+            // let (width, height) = subtree.update_base_dimensions();
+            // // Propagate width to parent subtrees
+            // let mut current_parent = path.parent();
+            // while let Some((parent_path, parent)) = current_parent
+            //     .map(|p| self.subtrees.get(&p).map(|s| (p, s)))
+            //     .flatten()
+            // {
+            //     parent.ui_state.borrow_mut().children_width += width;
+            //     levels_height[parent_path.level()].0 += width;
+            //     current_parent = parent_path.parent();
+            // }
+
+            // levels_height[path.level()].1 =
+            // levels_height[path.level()].1.max(height);
         }
     }
 
@@ -104,7 +118,10 @@ impl<'c> Tree<'c> {
             .set_visible(true);
     }
 
-    pub(crate) fn iter_subtrees<'t>(&'t self) -> impl ExactSizeIterator<Item = SubtreeCtx<'t, 'c>> {
+    pub(crate) fn iter_subtrees<'t>(
+        &'t self,
+    ) -> impl ExactSizeIterator<Item = SubtreeCtx<'t, 'c>> + DoubleEndedIterator<Item = SubtreeCtx<'t, 'c>>
+    {
         self.subtrees.iter().map(|(path, subtree)| SubtreeCtx {
             path: *path,
             subtree,
@@ -123,7 +140,7 @@ impl<'c> Tree<'c> {
             .flatten()
     }
 
-    pub(crate) fn get_subtree<'a>(&'a self, path: &Path<'c>) -> Option<SubtreeCtx> {
+    pub(crate) fn get_subtree<'a>(&'a self, path: &Path<'c>) -> Option<SubtreeCtx<'a, 'c>> {
         self.subtrees.get(path).map(|subtree| SubtreeCtx {
             subtree,
             path: *path,
@@ -193,6 +210,11 @@ impl<'c> Tree<'c> {
     }
 }
 
+struct SubtreeWidth {
+    n_collapsed: usize,
+    expanded: Vec<usize>,
+}
+
 #[derive(Debug, Default)]
 #[cfg_attr(test, derive(PartialEq))]
 pub(crate) struct SubtreeUiState {
@@ -202,8 +224,7 @@ pub(crate) struct SubtreeUiState {
     pub(crate) output_point: Pos2,
     pub(crate) page: usize,
     pub(crate) visible: bool,
-    pub(crate) width: f32,
-    pub(crate) children_width: f32,
+    pub(crate) width: usize,
     pub(crate) height: f32,
     pub(crate) levels: u32,
     pub(crate) leafs: u32,
@@ -237,20 +258,20 @@ impl<'c> Subtree<'c> {
         self.nodes.is_empty()
     }
 
-    fn update_base_dimensions(&self) -> (f32, f32) {
-        let mut state = self.ui_state.borrow_mut();
-        if state.expanded {
-            let (width, height, levels, leafs) = expanded_subtree_dimentions(self);
-            state.width = width;
-            state.height = height;
-            state.levels = levels;
-            state.leafs = leafs;
-        } else {
-            state.width = COLLAPSED_SUBTREE_WIDTH;
-            state.height = COLLAPSED_SUBTREE_HEIGHT;
-        }
-        (state.width, state.height)
-    }
+    // fn update_base_dimensions(&self) -> (f32, f32) {
+    //     let mut state = self.ui_state.borrow_mut();
+    //     if state.expanded {
+    //         let (width, height, levels, leafs) =
+    // expanded_subtree_dimentions(self);         state.width = width;
+    //         state.height = height;
+    //         state.levels = levels;
+    //         state.leafs = leafs;
+    //     } else {
+    //         state.width = COLLAPSED_SUBTREE_WIDTH;
+    //         state.height = COLLAPSED_SUBTREE_HEIGHT;
+    //     }
+    //     (state.width, state.height)
+    // }
 
     pub(crate) fn levels(&self) -> u32 {
         self.ui_state.borrow().levels
@@ -260,9 +281,8 @@ impl<'c> Subtree<'c> {
         self.ui_state.borrow().leafs
     }
 
-    pub(crate) fn width(&self) -> f32 {
-        let state = self.ui_state.borrow();
-        state.width.max(state.children_width)
+    pub(crate) fn width(&self) -> usize {
+        self.ui_state.borrow().width
     }
 
     fn new() -> Self {
@@ -520,7 +540,36 @@ pub(crate) struct SubtreeCtx<'t, 'c> {
     tree: &'t Tree<'c>,
 }
 
+type Height = usize;
+
 impl<'a, 'c> SubtreeCtx<'a, 'c> {
+    pub(crate) fn is_visible(&self) -> bool {
+        self.subtree.ui_state.borrow().visible
+    }
+
+    fn update_dimensions(&self) -> Height {
+        let mut state = self.subtree.ui_state.borrow_mut();
+        let (height, self_width) = if state.expanded {
+            let levels = expanded_subtree_levels(self.subtree);
+            (levels, leaves_level_count(levels as u32) as usize)
+        } else {
+            (5, 1)
+        };
+
+        let (count, mut children_width): (usize, usize) = self
+            .iter_subtrees()
+            .filter_map(|subtree_ctx| {
+                let state = subtree_ctx.subtree.ui_state.borrow();
+                state.visible.then_some((1, state.width))
+            })
+            .fold((0, 0), |acc, (count, width)| (acc.0 + count, acc.1 + width));
+
+        children_width += count.saturating_sub(1); // Intervals also count
+
+        state.width = cmp::max(self_width, children_width);
+        height
+    }
+
     pub(crate) fn iter_subtrees(&self) -> impl Iterator<Item = SubtreeCtx<'a, 'c>> + '_ {
         self.subtree.iter_subtree_keys().map(|key| {
             let path = self.path.child(key.to_vec());

@@ -79,13 +79,17 @@ impl Hash for Path<'_> {
 
 impl PartialEq for Path<'_> {
     fn eq(&self, other: &Self) -> bool {
-        ptr::eq(&self.ctx, &other.ctx) && self.head_slab_id == other.head_slab_id
+        self.head_slab_id == other.head_slab_id
     }
 }
 
 impl PartialOrd for Path<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.head_slab_id.cmp(&other.head_slab_id))
+        Some(
+            self.level()
+                .cmp(&other.level())
+                .then_with(|| self.head_slab_id.cmp(&other.head_slab_id)),
+        )
     }
 }
 

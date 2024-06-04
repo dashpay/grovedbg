@@ -1,5 +1,7 @@
 //! Tree structure UI module
 
+use std::{cmp, collections::VecDeque};
+
 use eframe::{
     egui::{self, Id},
     emath::TSTransform,
@@ -10,16 +12,17 @@ use tokio::sync::mpsc::Sender;
 use super::{
     common::{binary_label_colored, path_label},
     node::{draw_element, draw_node, element_to_color},
-    DisplayVariant,
 };
 use crate::{
     fetch::Message,
     model::{
-        alignment::{COLLAPSED_SUBTREE_WIDTH, NODE_HEIGHT},
-        path_display::Path,
-        Element, Key, KeySlice, Node, NodeCtx, SubtreeCtx, Tree,
+        alignment::COLLAPSED_SUBTREE_WIDTH, path_display::Path, Element, Key, NodeCtx, SubtreeCtx,
+        Tree,
     },
 };
+
+const CELL_X: f32 = 250.0;
+const CELL_Y: f32 = 150.0;
 
 const KV_PER_PAGE: usize = 10;
 
@@ -88,102 +91,107 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
             .set_transform_layer(layer_response.layer_id, self.transform);
     }
 
-    fn draw_subtree_part(&mut self, mut coords: Pos2, node_ctx: NodeCtx<'t, 't>) {
-        let subtree_ctx = node_ctx.subtree_ctx();
-        let mut current_level_nodes: Vec<Option<(Option<Key>, KeySlice)>> = Vec::new();
-        let mut next_level_nodes: Vec<Option<(Option<Key>, KeySlice)>> = Vec::new();
-        let mut level: u32 = 0;
-        let levels = node_ctx.subtree().levels();
-        let leafs = node_ctx.subtree().leafs();
+    // fn draw_subtree_part(&mut self, mut coords: Pos2, node_ctx: NodeCtx<'t, 't>)
+    // {     let subtree_ctx = node_ctx.subtree_ctx();
+    //     let mut current_level_nodes: Vec<Option<(Option<Key>, KeySlice)>> =
+    // Vec::new();     let mut next_level_nodes: Vec<Option<(Option<Key>,
+    // KeySlice)>> = Vec::new();     let mut level: u32 = 0;
+    //     let levels = node_ctx.subtree().levels();
+    //     let leafs = node_ctx.subtree().leafs();
 
-        current_level_nodes.push(Some((None, node_ctx.key())));
+    //     current_level_nodes.push(Some((None, node_ctx.key())));
 
-        let max_width = node_ctx.subtree().width();
-        let x_base = coords.x - max_width / 2.;
+    //     let max_width = node_ctx.subtree().width();
+    //     let x_base = coords.x - max_width / 2.;
 
-        let unit = max_width / leafs as f32;
+    //     let unit = max_width / leafs as f32;
 
-        while level <= levels {
-            coords.x = x_base;
-            if level < levels {
-                coords.x += 2u32.pow(levels - level - 1) as f32 * unit;
-            }
+    //     while level <= levels {
+    //         coords.x = x_base;
+    //         if level < levels {
+    //             coords.x += 2u32.pow(levels - level - 1) as f32 * unit;
+    //         }
 
-            for item in current_level_nodes.drain(..) {
-                if let Some((parent_key, cur_node_ctx)) = item
-                    .map(|(p, k)| subtree_ctx.get_node(k.to_vec()).map(|ctx| (p, ctx)))
-                    .flatten()
-                {
-                    let parent_out_coords = parent_key
-                        .map(|k| subtree_ctx.subtree().get_node_output(&k))
-                        .flatten();
-                    self.draw_node_area(parent_out_coords, coords, &cur_node_ctx);
+    //         for item in current_level_nodes.drain(..) {
+    //             if let Some((parent_key, cur_node_ctx)) = item
+    //                 .map(|(p, k)| subtree_ctx.get_node(k.to_vec()).map(|ctx| (p,
+    // ctx)))                 .flatten()
+    //             {
+    //                 let parent_out_coords = parent_key
+    //                     .map(|k| subtree_ctx.subtree().get_node_output(&k))
+    //                     .flatten();
+    //                 self.draw_node_area(parent_out_coords, coords,
+    // &cur_node_ctx);
 
-                    // let (node, _, key) = cur_node_ctx.split();
+    //                 // let (node, _, key) = cur_node_ctx.split();
 
-                    if let Element::Reference { path, key } = &cur_node_ctx.node().element {
-                        self.references.push((
-                            cur_node_ctx.node().ui_state.borrow().output_point,
-                            path.clone(),
-                            key.clone(),
-                        ));
-                    }
+    //                 if let Element::Reference { path, key } =
+    // &cur_node_ctx.node().element {                     self.references.push((
+    //                         cur_node_ctx.node().ui_state.borrow().output_point,
+    //                         path.clone(),
+    //                         key.clone(),
+    //                     ));
+    //                 }
 
-                    next_level_nodes.push(
-                        cur_node_ctx
-                            .node()
-                            .ui_state
-                            .borrow()
-                            .show_left
-                            .then_some(
-                                cur_node_ctx.node().left_child.as_deref().map(|child_key| {
-                                    (Some(cur_node_ctx.key().to_vec()), child_key)
-                                }),
-                            )
-                            .flatten(),
-                    );
+    //                 next_level_nodes.push(
+    //                     cur_node_ctx
+    //                         .node()
+    //                         .ui_state
+    //                         .borrow()
+    //                         .show_left
+    //                         .then_some(
+    //                             
+    // cur_node_ctx.node().left_child.as_deref().map(|child_key| {              
+    // (Some(cur_node_ctx.key().to_vec()), child_key)                           
+    // }),                         )
+    //                         .flatten(),
+    //                 );
 
-                    next_level_nodes.push(
-                        cur_node_ctx
-                            .node()
-                            .ui_state
-                            .borrow()
-                            .show_right
-                            .then_some(
-                                cur_node_ctx.node().right_child.as_deref().map(|child_key| {
-                                    (Some(cur_node_ctx.key().to_vec()), child_key)
-                                }),
-                            )
-                            .flatten(),
-                    );
-                } else {
-                    next_level_nodes.push(None);
-                    next_level_nodes.push(None);
-                }
-                coords.x += 2u32.pow(levels - level) as f32 * unit;
-            }
-            if next_level_nodes.iter().all(Option::is_none) {
-                break;
-            }
+    //                 next_level_nodes.push(
+    //                     cur_node_ctx
+    //                         .node()
+    //                         .ui_state
+    //                         .borrow()
+    //                         .show_right
+    //                         .then_some(
+    //                             
+    // cur_node_ctx.node().right_child.as_deref().map(|child_key| {             
+    // (Some(cur_node_ctx.key().to_vec()), child_key)                           
+    // }),                         )
+    //                         .flatten(),
+    //                 );
+    //             } else {
+    //                 next_level_nodes.push(None);
+    //                 next_level_nodes.push(None);
+    //             }
+    //             coords.x += 2u32.pow(levels - level) as f32 * unit;
+    //         }
+    //         if next_level_nodes.iter().all(Option::is_none) {
+    //             break;
+    //         }
 
-            coords.y += NODE_HEIGHT;
-            std::mem::swap(&mut current_level_nodes, &mut next_level_nodes);
-            level += 1;
-        }
-    }
+    //         coords.y += NODE_HEIGHT;
+    //         std::mem::swap(&mut current_level_nodes, &mut next_level_nodes);
+    //         level += 1;
+    //     }
+    // }
 
-    fn draw_subtree(&mut self, coords: Pos2, subtree_ctx: SubtreeCtx<'t, 'c>) {
+    fn draw_subtree(&mut self, coords: (i64, usize), subtree_ctx: SubtreeCtx<'t, 'c>) {
         if subtree_ctx.subtree().is_expanded() {
-            self.draw_subtree_expanded(coords, subtree_ctx);
+            //  self.draw_subtree_expanded(coords, subtree_ctx);
         } else {
             self.draw_subtree_collapsed(coords, subtree_ctx);
         }
     }
 
-    fn draw_subtree_collapsed(&mut self, coords: Pos2, subtree_ctx: SubtreeCtx<'t, 'c>) {
+    fn draw_subtree_collapsed(
+        &mut self,
+        (coord_x, coord_y): (i64, usize),
+        subtree_ctx: SubtreeCtx<'t, 'c>,
+    ) {
         let subtree = subtree_ctx.subtree();
         let layer_response = egui::Area::new(subtree_ctx.egui_id())
-            .fixed_pos(coords)
+            .fixed_pos((coord_x as f32 * CELL_X, coord_y as f32 * CELL_Y))
             .order(egui::Order::Foreground)
             .show(self.ui.ctx(), |ui| {
                 ui.set_clip_rect(self.transform.inverse() * self.rect);
@@ -348,83 +356,114 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
             .set_transform_layer(layer_response.layer_id, self.transform);
     }
 
-    fn draw_subtree_expanded(&mut self, coords: Pos2, subtree_ctx: SubtreeCtx<'t, 't>) {
-        subtree_ctx.get_root().into_iter().for_each(|node_ctx| {
-            self.draw_subtree_part(coords, node_ctx);
-        });
-    }
+    // fn draw_subtree_expanded(&mut self, coords: Pos2, subtree_ctx: SubtreeCtx<'t,
+    // 't>) {     subtree_ctx.get_root().into_iter().for_each(|node_ctx| {
+    //         self.draw_subtree_part(coords, node_ctx);
+    //     });
+    // }
 
     pub(crate) fn draw_tree(mut self) {
         self.tree.update_dimensions();
 
-        let mut current_level = 0;
-        let mut current_height = 100.;
-        let mut current_parent = None;
-        let mut current_x_per_parent = 500.;
+        let mut parents_queue = VecDeque::new();
 
-        for subtree_ctx in self
-            .tree
-            .iter_subtrees()
-            .filter(|ctx| ctx.subtree().visible())
-        {
-            let parent_path = subtree_ctx.path().parent();
-            if current_parent != parent_path {
-                current_parent = parent_path;
-                if let Some(path) = current_parent {
-                    let parent_subtree = self.tree.subtrees.get(&path).expect("parent must exist");
-                    current_x_per_parent = parent_subtree.get_subtree_input_point().unwrap().x
-                        - parent_subtree.width() / 2.0
-                        - COLLAPSED_SUBTREE_WIDTH / 2.0;
-                }
-            }
-            if subtree_ctx.path().level() > current_level {
-                current_height += self.tree.levels_dimentions.borrow()[current_level].1
-                    + self.tree.levels_dimentions.borrow()[current_level].0 * 0.05;
-                current_level += 1;
-            }
+        let Some(root_subtree) = self.tree.get_subtree(&self.tree.path_ctx.get_root()) else {
+            return;
+        };
 
-            if subtree_ctx.path().level() > 0 {
-                current_x_per_parent += subtree_ctx.subtree().width() / 2.0;
-            }
-            self.draw_subtree(Pos2::new(current_x_per_parent, current_height), subtree_ctx);
-            if subtree_ctx.path().level() > 0 {
-                current_x_per_parent += subtree_ctx.subtree().width() / 2.0;
-            }
+        parents_queue.push_back((0 as i64, root_subtree));
 
-            let root_in = subtree_ctx.subtree().get_subtree_input_point();
-            let key = subtree_ctx
-                .path()
-                .for_last_segment(|key| key.bytes().to_vec());
-            let subtree_parent_out: Option<Pos2> = parent_path
-                .as_ref()
-                .map(|path| self.tree.get_subtree(path))
-                .flatten()
-                .map(|s| key.map(|k| s.subtree().get_node_output(&k)))
-                .flatten()
-                .flatten();
-            if let (Some(in_point), Some(out_point)) = (root_in, subtree_parent_out) {
-                let layer_response =
-                    egui::Area::new(Id::new(("subtree_lines", subtree_ctx.path())))
-                        .default_pos(Pos2::new(0.0, 0.0))
-                        .order(egui::Order::Background)
-                        .show(self.ui.ctx(), |ui| {
-                            ui.set_clip_rect(self.transform.inverse() * self.rect);
+        self.draw_subtree((0, 0), root_subtree);
 
-                            let painter = ui.painter();
-                            painter.line_segment(
-                                [out_point, in_point],
-                                Stroke {
-                                    width: 1.0,
-                                    color: Color32::GOLD,
-                                },
-                            );
-                        })
-                        .response;
-                self.ui
-                    .ctx()
-                    .set_transform_layer(layer_response.layer_id, self.transform);
+        while let Some((x, parent_subtree_ctx)) = parents_queue.pop_front() {
+            let current_height = self
+                .tree
+                .levels_heights
+                .borrow()
+                .iter()
+                .take(parent_subtree_ctx.path().level() + 1)
+                .sum();
+            let mut current_children_x = x - parent_subtree_ctx.subtree().width() as i64 / 2;
+            let current_parent_children_queue: VecDeque<_> = parent_subtree_ctx
+                .iter_subtrees()
+                .filter(SubtreeCtx::is_visible)
+                .collect();
+
+            for child in current_parent_children_queue.iter() {
+                let child_x = current_children_x + child.subtree().width() as i64 / 2;
+                parents_queue.push_back((child_x, child.clone()));
+
+                self.draw_subtree((child_x, current_height), child.clone());
+
+                current_children_x += child.subtree().width() as i64 + 1;
             }
         }
+
+        // for subtree_ctx in self
+        //     .tree
+        //     .iter_subtrees()
+        //     .filter(|ctx| ctx.subtree().visible())
+        // {
+        //     let parent_path = subtree_ctx.path().parent();
+        //     if current_parent != parent_path {
+        //         current_parent = parent_path;
+        //         if let Some(path) = current_parent {
+        //             let parent_subtree = self.tree.subtrees.get(&path).expect("parent
+        // must exist");             current_x_per_parent =
+        // parent_subtree.get_subtree_input_point().unwrap().x
+        //                 - parent_subtree.width() / 2.0
+        //                 - COLLAPSED_SUBTREE_WIDTH / 2.0;
+        //         }
+        //     }
+        //     if subtree_ctx.path().level() > current_level {
+        //         current_height +=
+        // self.tree.levels_dimentions.borrow()[current_level].1
+        //             + self.tree.levels_dimentions.borrow()[current_level].0 * 0.05;
+        //         current_level += 1;
+        //     }
+
+        //     if subtree_ctx.path().level() > 0 {
+        //         current_x_per_parent += subtree_ctx.subtree().width() / 2.0;
+        //     }
+        //     self.draw_subtree(Pos2::new(current_x_per_parent, current_height),
+        // subtree_ctx);     if subtree_ctx.path().level() > 0 {
+        //         current_x_per_parent += subtree_ctx.subtree().width() / 2.0;
+        //     }
+
+        //     let root_in = subtree_ctx.subtree().get_subtree_input_point();
+        //     let key = subtree_ctx
+        //         .path()
+        //         .for_last_segment(|key| key.bytes().to_vec());
+        //     let subtree_parent_out: Option<Pos2> = parent_path
+        //         .as_ref()
+        //         .map(|path| self.tree.get_subtree(path))
+        //         .flatten()
+        //         .map(|s| key.map(|k| s.subtree().get_node_output(&k)))
+        //         .flatten()
+        //         .flatten();
+        //     if let (Some(in_point), Some(out_point)) = (root_in, subtree_parent_out)
+        // {         let layer_response =
+        //             egui::Area::new(Id::new(("subtree_lines", subtree_ctx.path())))
+        //                 .default_pos(Pos2::new(0.0, 0.0))
+        //                 .order(egui::Order::Background)
+        //                 .show(self.ui.ctx(), |ui| {
+        //                     ui.set_clip_rect(self.transform.inverse() * self.rect);
+
+        //                     let painter = ui.painter();
+        //                     painter.line_segment(
+        //                         [out_point, in_point],
+        //                         Stroke {
+        //                             width: 1.0,
+        //                             color: Color32::GOLD,
+        //                         },
+        //                     );
+        //                 })
+        //                 .response;
+        //         self.ui
+        //             .ctx()
+        //             .set_transform_layer(layer_response.layer_id, self.transform);
+        //     }
+        // }
 
         let layer_response = egui::Area::new(Id::new("references"))
             .default_pos(Pos2::new(0.0, 0.0))
