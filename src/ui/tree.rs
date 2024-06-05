@@ -101,17 +101,15 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
         let mut next_level_nodes: Vec<Option<(Option<Key>, KeySlice)>> = Vec::new();
         let mut level: u32 = 0;
         let levels = node_ctx.subtree().levels();
-        let leafs = node_ctx.subtree().leafs();
+        let leaves = node_ctx.subtree().leaves();
 
         current_level_nodes.push(Some((None, node_ctx.key())));
 
-        let x_base = x_coord - leafs as i64 / 2;
+        let x_base = x_coord - leaves as i64;
 
-        while level <= levels {
+        while level < levels {
             x_coord = x_base;
-            if level < levels {
-                x_coord += 2i64.pow(levels - level - 1);
-            }
+            x_coord += 2i64.pow(levels - level - 1) - 1;
 
             for item in current_level_nodes.drain(..) {
                 if let Some((parent_key, cur_node_ctx)) = item
@@ -174,7 +172,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                 break;
             }
 
-            y_coord += 1;
+            y_coord += 2;
             std::mem::swap(&mut current_level_nodes, &mut next_level_nodes);
             level += 1;
         }
@@ -247,23 +245,11 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                             }
                         });
 
-                        ui.allocate_ui(
-                            egui::Vec2 {
-                                x: COLLAPSED_SUBTREE_WIDTH - 50.,
-                                y: 10.0,
-                            },
-                            |ui| ui.separator(),
-                        );
+                        ui.allocate_ui(egui::Vec2 { x: CELL_X, y: 10.0 }, |ui| ui.separator());
 
                         path_label(ui, subtree_ctx.path());
 
-                        ui.allocate_ui(
-                            egui::Vec2 {
-                                x: COLLAPSED_SUBTREE_WIDTH - 50.,
-                                y: 10.0,
-                            },
-                            |ui| ui.separator(),
-                        );
+                        ui.allocate_ui(egui::Vec2 { x: CELL_X, y: 10.0 }, |ui| ui.separator());
 
                         for node_ctx in subtree_ctx
                             .iter_nodes()
@@ -437,14 +423,16 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
         //     if current_parent != parent_path {
         //         current_parent = parent_path;
         //         if let Some(path) = current_parent {
-        //             let parent_subtree = self.tree.subtrees.get(&path).expect("parent must exist");
-        //             current_x_per_parent = parent_subtree.get_subtree_input_point().unwrap().x
+        //             let parent_subtree = self.tree.subtrees.get(&path).expect("parent
+        // must exist");             current_x_per_parent =
+        // parent_subtree.get_subtree_input_point().unwrap().x
         //                 - parent_subtree.width() / 2.0
         //                 - COLLAPSED_SUBTREE_WIDTH / 2.0;
         //         }
         //     }
         //     if subtree_ctx.path().level() > current_level {
-        //         current_height += self.tree.levels_dimentions.borrow()[current_level].1
+        //         current_height +=
+        // self.tree.levels_dimentions.borrow()[current_level].1
         //             + self.tree.levels_dimentions.borrow()[current_level].0 * 0.05;
         //         current_level += 1;
         //     }
@@ -452,8 +440,8 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
         //     if subtree_ctx.path().level() > 0 {
         //         current_x_per_parent += subtree_ctx.subtree().width() / 2.0;
         //     }
-        //     self.draw_subtree(Pos2::new(current_x_per_parent, current_height), subtree_ctx);
-        //     if subtree_ctx.path().level() > 0 {
+        //     self.draw_subtree(Pos2::new(current_x_per_parent, current_height),
+        // subtree_ctx);     if subtree_ctx.path().level() > 0 {
         //         current_x_per_parent += subtree_ctx.subtree().width() / 2.0;
         //     }
 
@@ -468,8 +456,8 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
         //         .map(|s| key.map(|k| s.subtree().get_node_output(&k)))
         //         .flatten()
         //         .flatten();
-        //     if let (Some(in_point), Some(out_point)) = (root_in, subtree_parent_out) {
-        //         let layer_response =
+        //     if let (Some(in_point), Some(out_point)) = (root_in, subtree_parent_out)
+        // {         let layer_response =
         //             egui::Area::new(Id::new(("subtree_lines", subtree_ctx.path())))
         //                 .default_pos(Pos2::new(0.0, 0.0))
         //                 .order(egui::Order::Background)

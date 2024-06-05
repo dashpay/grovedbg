@@ -227,7 +227,7 @@ pub(crate) struct SubtreeUiState {
     pub(crate) width: usize,
     pub(crate) height: f32,
     pub(crate) levels: u32,
-    pub(crate) leafs: u32,
+    pub(crate) leaves: u32,
 }
 
 /// Subtree holds all the info about one specific subtree of GroveDB
@@ -261,11 +261,11 @@ impl<'c> Subtree<'c> {
     // fn update_base_dimensions(&self) -> (f32, f32) {
     //     let mut state = self.ui_state.borrow_mut();
     //     if state.expanded {
-    //         let (width, height, levels, leafs) =
+    //         let (width, height, levels, leaves) =
     // expanded_subtree_dimentions(self);         state.width = width;
     //         state.height = height;
     //         state.levels = levels;
-    //         state.leafs = leafs;
+    //         state.leaves = leaves;
     //     } else {
     //         state.width = COLLAPSED_SUBTREE_WIDTH;
     //         state.height = COLLAPSED_SUBTREE_HEIGHT;
@@ -277,8 +277,8 @@ impl<'c> Subtree<'c> {
         self.ui_state.borrow().levels
     }
 
-    pub(crate) fn leafs(&self) -> u32 {
-        self.ui_state.borrow().leafs
+    pub(crate) fn leaves(&self) -> u32 {
+        self.ui_state.borrow().leaves
     }
 
     pub(crate) fn width(&self) -> usize {
@@ -551,7 +551,10 @@ impl<'a, 'c> SubtreeCtx<'a, 'c> {
         let mut state = self.subtree.ui_state.borrow_mut();
         let (height, self_width) = if state.expanded {
             let levels = expanded_subtree_levels(self.subtree);
-            (levels, leaves_level_count(levels as u32) as usize)
+            let leaves = leaves_level_count(levels as u32);
+            state.levels = levels as u32;
+            state.leaves = leaves;
+            (levels, leaves * 2)
         } else {
             (5, 1)
         };
@@ -566,7 +569,7 @@ impl<'a, 'c> SubtreeCtx<'a, 'c> {
 
         children_width += count.saturating_sub(1); // Intervals also count
 
-        state.width = cmp::max(self_width, children_width);
+        state.width = cmp::max(self_width as usize, children_width);
         height
     }
 
