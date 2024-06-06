@@ -225,6 +225,7 @@ pub(crate) struct SubtreeUiState {
     pub(crate) page: usize,
     pub(crate) visible: bool,
     pub(crate) width: usize,
+    pub(crate) children_width: usize,
     pub(crate) height: f32,
     pub(crate) levels: u32,
     pub(crate) leaves: u32,
@@ -283,6 +284,10 @@ impl<'c> Subtree<'c> {
 
     pub(crate) fn width(&self) -> usize {
         self.ui_state.borrow().width
+    }
+
+    pub(crate) fn children_width(&self) -> usize {
+        self.ui_state.borrow().children_width
     }
 
     fn new() -> Self {
@@ -556,7 +561,7 @@ impl<'a, 'c> SubtreeCtx<'a, 'c> {
             state.leaves = leaves;
             (levels, leaves * 2)
         } else {
-            (5, 1)
+            (2, 1)
         };
 
         let (count, mut children_width): (usize, usize) = self
@@ -568,9 +573,10 @@ impl<'a, 'c> SubtreeCtx<'a, 'c> {
             .fold((0, 0), |acc, (count, width)| (acc.0 + count, acc.1 + width));
 
         children_width += count.saturating_sub(1); // Intervals also count
+        state.children_width = children_width;
 
         state.width = cmp::max(self_width as usize, children_width);
-        height
+        height * 2
     }
 
     pub(crate) fn iter_subtrees(&self) -> impl Iterator<Item = SubtreeCtx<'a, 'c>> + '_ {

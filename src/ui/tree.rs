@@ -22,7 +22,7 @@ use crate::{
 };
 
 const CELL_X: f32 = 300.0;
-const CELL_Y: f32 = 150.0;
+const CELL_Y: f32 = 200.0;
 
 const KV_PER_PAGE: usize = 10;
 
@@ -373,7 +373,8 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                 .iter()
                 .take(parent_subtree_ctx.path().level() + 1)
                 .sum();
-            let mut current_children_x = x - parent_subtree_ctx.subtree().width() as i64 / 2;
+            let mut current_children_x =
+                x - parent_subtree_ctx.subtree().children_width() as i64 / 2;
             let current_parent_children_queue: VecDeque<_> = parent_subtree_ctx
                 .iter_subtrees()
                 .filter(SubtreeCtx::is_visible)
@@ -385,7 +386,15 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
 
                 self.draw_subtree((child_x, current_height), child.clone());
 
-                if let Some(input_point) = child.subtree().get_subtree_input_point() {
+                let output_point = child
+                    .path()
+                    .for_last_segment(|key| {
+                        parent_subtree_ctx.subtree().get_node_output(key.bytes())
+                    })
+                    .flatten();
+                if let (Some(output_point), Some(input_point)) =
+                    (output_point, child.subtree().get_subtree_input_point())
+                {
                     let layer_response = egui::Area::new(Id::new(("subtree_lines", child.path())))
                         .default_pos(Pos2::new(0.0, 0.0))
                         .order(egui::Order::Background)
@@ -394,10 +403,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
 
                             let painter = ui.painter();
                             painter.line_segment(
-                                [
-                                    parent_subtree_ctx.subtree().get_subtree_output_point(),
-                                    input_point,
-                                ],
+                                [output_point, input_point],
                                 Stroke {
                                     width: 1.0,
                                     color: Color32::GOLD,
