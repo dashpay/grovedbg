@@ -11,6 +11,7 @@ grovedbg-types = { git = "https://github.com/dashpay/grovedb", branch = "grove-d
 hex = "0.4.3"
 log = "0.4.21"
 reqwest = { version = "0.12.4", features = ["json"] }
+slab = "0.4.9"
 strum = { version = "0.26.2", features = ["strum_macros", "derive"] }
 thiserror = "1.0.60"
 tokio = { version = "1.37.0", features = ["rt", "sync"] }

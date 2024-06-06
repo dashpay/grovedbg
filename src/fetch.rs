@@ -9,8 +9,10 @@ use grovedbg_types::{NodeFetchRequest, NodeUpdate, RootFetchRequest};
 use reqwest::Client;
 use tokio::sync::mpsc::Receiver;
 
-use self::proto_conversion::BadProtoElement;
-use crate::model::{Key, Node, Path, Tree};
+use self::proto_conversion::{from_update, BadProtoElement};
+use crate::model::{path_display::PathCtx, Key, Node, Tree};
+
+type Path = Vec<Vec<u8>>;
 
 pub(crate) enum Message {
     FetchRoot,
@@ -27,11 +29,21 @@ pub(crate) enum FetchError {
     // TransportError(#[from] grovedbg_grpc::tonic::Status),
 }
 
+#[cfg(target_arch = "wasm32")]
 fn base_url() -> String {
     web_sys::window().unwrap().location().origin().unwrap()
 }
 
-pub(crate) async fn process_messages(mut receiver: Receiver<Message>, tree: Arc<Mutex<Tree>>) {
+#[cfg(not(target_arch = "wasm32"))]
+fn base_url() -> String {
+    unimplemented!()
+}
+
+pub(crate) async fn process_messages<'c>(
+    mut receiver: Receiver<Message>,
+    tree: &Mutex<Tree<'c>>,
+    path_ctx: &'c PathCtx,
+) {
     let client = Client::new();
 
     while let Some(message) = receiver.recv().await {
@@ -53,16 +65,16 @@ pub(crate) async fn process_messages(mut receiver: Receiver<Message>, tree: Arc<
                 let mut lock = tree.lock().unwrap();
                 lock.set_root(root_node.key.clone());
                 lock.insert(
-                    vec![].into(),
+                    path_ctx.get_root(),
                     root_node.key.clone(),
-                    root_node.try_into().unwrap(),
+                    from_update(path_ctx, root_node).unwrap(),
                 );
             }
             Message::FetchNode { path, key } => {
                 let Some(node_update) = client
                     .post(format!("{}/fetch_node", base_url()))
                     .json(&NodeFetchRequest {
-                        path: path.0.clone(),
+                        path: path.clone(),
                         key: key.clone(),
                     })
                     .send()
@@ -75,7 +87,11 @@ pub(crate) async fn process_messages(mut receiver: Receiver<Message>, tree: Arc<
                     return;
                 };
                 let mut lock = tree.lock().unwrap();
-                lock.insert(path, key, node_update.try_into().unwrap());
+                lock.insert(
+                    path_ctx.add_path(path),
+                    key,
+                    from_update(path_ctx, node_update).unwrap(),
+                );
             }
             Message::FetchBranch { path, key } => {
                 let mut queue = VecDeque::new();
@@ -87,7 +103,7 @@ pub(crate) async fn process_messages(mut receiver: Receiver<Message>, tree: Arc<
                     let Some(node_update) = client
                         .post(format!("{}/fetch_node", base_url()))
                         .json(&NodeFetchRequest {
-                            path: path.0.clone(),
+                            path: path.clone(),
                             key: node_key.clone(),
                         })
                         .send()
@@ -100,7 +116,7 @@ pub(crate) async fn process_messages(mut receiver: Receiver<Message>, tree: Arc<
                         continue;
                     };
 
-                    let node: Node = node_update.try_into().unwrap();
+                    let node: Node = from_update(path_ctx, node_update).unwrap();
 
                     if let Some(left) = &node.left_child {
                         queue.push_back(left.clone());
@@ -114,13 +130,13 @@ pub(crate) async fn process_messages(mut receiver: Receiver<Message>, tree: Arc<
                 }
 
                 let mut lock = tree.lock().unwrap();
-                to_insert
-                    .into_iter()
-                    .for_each(|(key, node)| lock.insert(path.clone(), key, node));
+                to_insert.into_iter().for_each(|(key, node)| {
+                    lock.insert(path_ctx.add_path(path.clone()), key, node)
+                });
             }
             Message::UnloadSubtree { path } => {
                 let mut lock = tree.lock().unwrap();
-                lock.clear_subtree(&path);
+                lock.clear_subtree(path_ctx.add_path(path));
             }
         }
     }

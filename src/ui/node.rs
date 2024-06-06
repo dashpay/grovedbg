@@ -1,20 +1,27 @@
+use std::borrow::Borrow;
+
 use eframe::{
     egui,
     epaint::{Color32, Stroke},
 };
 use tokio::sync::mpsc::Sender;
 
-use super::common::{binary_label, bytes_by_display_variant, path_label};
+use super::{
+    common::{binary_label, bytes_by_display_variant, path_label},
+    DisplayVariant,
+};
 use crate::{
     fetch::Message,
-    model::{Element, Node, NodeCtx},
+    model::{Element, NodeCtx},
 };
 
-pub(crate) fn draw_node<'a>(ui: &mut egui::Ui, sender: &Sender<Message>, node_ctx: NodeCtx<'a>) {
-    let (node, _, key) = node_ctx.split();
-
+pub(crate) fn draw_node<'a, 'c>(
+    ui: &mut egui::Ui,
+    sender: &Sender<Message>,
+    node_ctx: &NodeCtx<'a, 'c>,
+) {
     let mut stroke = Stroke::default();
-    stroke.color = element_to_color(&node.element);
+    stroke.color = element_to_color(&node_ctx.node().element);
     stroke.width = 1.0;
 
     egui::Frame::default()
@@ -31,17 +38,20 @@ pub(crate) fn draw_node<'a>(ui: &mut egui::Ui, sender: &Sender<Message>, node_ct
                 }
             });
 
-            binary_label(ui, key, &mut node.ui_state.borrow_mut().key_display_variant);
+            node_ctx.with_key_display_variant(|display_variant| {
+                binary_label(ui, &node_ctx.key(), display_variant);
+            });
+
             draw_element(ui, node_ctx);
 
             ui.horizontal(|footer| {
                 if footer
-                    .add_enabled(node.left_child.is_some(), egui::Button::new("⬅"))
+                    .add_enabled(node_ctx.node().left_child.is_some(), egui::Button::new("⬅"))
                     .clicked()
                 {
                     node_ctx.set_left_visible();
                     sender.blocking_send(Message::FetchNode {
-                        path: node_ctx.path().clone(),
+                        path: node_ctx.path().to_vec(),
                         key: node_ctx
                             .node()
                             .left_child
@@ -52,13 +62,16 @@ pub(crate) fn draw_node<'a>(ui: &mut egui::Ui, sender: &Sender<Message>, node_ct
                 }
                 footer.label("|");
                 if footer
-                    .add_enabled(node.right_child.is_some(), egui::Button::new("➡"))
+                    .add_enabled(
+                        node_ctx.node().right_child.is_some(),
+                        egui::Button::new("➡"),
+                    )
                     .clicked()
                 {
                     node_ctx.set_right_visible();
 
                     sender.blocking_send(Message::FetchNode {
-                        path: node_ctx.path().clone(),
+                        path: node_ctx.path().to_vec(),
                         key: node_ctx
                             .node()
                             .right_child
@@ -72,7 +85,7 @@ pub(crate) fn draw_node<'a>(ui: &mut egui::Ui, sender: &Sender<Message>, node_ct
         .response;
 }
 
-pub(crate) fn draw_element(ui: &mut egui::Ui, node_ctx: NodeCtx) {
+pub(crate) fn draw_element(ui: &mut egui::Ui, node_ctx: &NodeCtx) {
     let node = node_ctx.node();
     match &node.element {
         Element::Item { value } => {
@@ -86,11 +99,7 @@ pub(crate) fn draw_element(ui: &mut egui::Ui, node_ctx: NodeCtx) {
             ui.label(format!("Value: {value}"));
         }
         Element::Reference { path, key } => {
-            path_label(
-                ui,
-                path,
-                &mut node.ui_state.borrow_mut().item_display_variant,
-            );
+            path_label(ui, *path);
             ui.horizontal(|line| {
                 line.add_space(20.0);
                 line.label(bytes_by_display_variant(
