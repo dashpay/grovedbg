@@ -86,27 +86,6 @@ impl<'c> Tree<'c> {
             let height = subtree_ctx.update_dimensions();
             let level = subtree_ctx.path().level();
             levels_heights[level] = cmp::max(levels_heights[level], height);
-
-            // subtree.ui_state.borrow_mut().children_width = 0.;
-            // if levels_height.len() < path.level() + 1 {
-            //     levels_height.push(Default::default());
-            // }
-            // levels_height[path.level()].0 = 0.0;
-
-            // let (width, height) = subtree.update_base_dimensions();
-            // // Propagate width to parent subtrees
-            // let mut current_parent = path.parent();
-            // while let Some((parent_path, parent)) = current_parent
-            //     .map(|p| self.subtrees.get(&p).map(|s| (p, s)))
-            //     .flatten()
-            // {
-            //     parent.ui_state.borrow_mut().children_width += width;
-            //     levels_height[parent_path.level()].0 += width;
-            //     current_parent = parent_path.parent();
-            // }
-
-            // levels_height[path.level()].1 =
-            // levels_height[path.level()].1.max(height);
         }
     }
 
@@ -201,6 +180,7 @@ impl<'c> Tree<'c> {
     /// contains a node for a child subtree, all missing parts will be
     /// created.
     fn populate_subtrees_chain(&mut self, path: Path<'c>) {
+        self.subtrees.entry(path).or_default();
         let mut current = path.parent_with_key();
         while let Some((parent, parent_key)) = current {
             let subtree = self.subtrees.entry(parent).or_default();
@@ -258,21 +238,6 @@ impl<'c> Subtree<'c> {
     pub(crate) fn is_empty(&self) -> bool {
         self.nodes.is_empty()
     }
-
-    // fn update_base_dimensions(&self) -> (f32, f32) {
-    //     let mut state = self.ui_state.borrow_mut();
-    //     if state.expanded {
-    //         let (width, height, levels, leaves) =
-    // expanded_subtree_dimentions(self);         state.width = width;
-    //         state.height = height;
-    //         state.levels = levels;
-    //         state.leaves = leaves;
-    //     } else {
-    //         state.width = COLLAPSED_SUBTREE_WIDTH;
-    //         state.height = COLLAPSED_SUBTREE_HEIGHT;
-    //     }
-    //     (state.width, state.height)
-    // }
 
     pub(crate) fn levels(&self) -> u32 {
         self.ui_state.borrow().levels
@@ -827,262 +792,231 @@ pub(crate) enum Element<'c> {
     SubtreePlaceholder,
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     fn sample_tree() -> Subtree {
-//         // root
-//         // ├── right1
-//         // │   ├── right2
-//         // │   └── left2
-//         // │       ├── right4
-//         // │       └── left4
-//         // └── left1
-//         //     └── right3
+    fn sample_tree(path_ctx: &PathCtx) -> Subtree {
+        // root
+        // ├── right1
+        // │   ├── right2
+        // │   └── left2
+        // │       ├── right4
+        // │       └── left4
+        // └── left1
+        //     └── right3
 
-//         let mut subtree = Subtree::new_root(b"root".to_vec());
+        let mut subtree = Subtree::new_root(b"root".to_vec());
 
-//         subtree.insert(
-//             b"root".to_vec(),
-//             Node::new_item(b"root_value".to_vec())
-//                 .with_left_child(b"left1".to_vec())
-//                 .with_right_child(b"right1".to_vec()),
-//         );
-//         subtree.insert(
-//             b"right1".to_vec(),
-//             Node::new_item(b"right1_value".to_vec())
-//                 .with_left_child(b"left2".to_vec())
-//                 .with_right_child(b"right2".to_vec()),
-//         );
-//         subtree.insert(
-//             b"left1".to_vec(),
-//
-// Node::new_item(b"left1_value".to_vec()).with_right_child(b"right3".to_vec()),
-//         );
-//         subtree.insert(b"right2".to_vec(),
-// Node::new_item(b"right2_value".to_vec()));         subtree.insert(
-//             b"left2".to_vec(),
-//             Node::new_item(b"left2_value".to_vec())
-//                 .with_left_child(b"left4".to_vec())
-//                 .with_right_child(b"right4".to_vec()),
-//         );
-//         subtree.insert(b"right3".to_vec(),
-// Node::new_item(b"right3_value".to_vec()));         subtree.insert(b"right4".
-// to_vec(), Node::new_item(b"right4_value".to_vec()));         subtree.
-// insert(b"left4".to_vec(), Node::new_item(b"right4_value".to_vec()));
+        subtree.insert(
+            b"root".to_vec(),
+            Node::new_item(b"root_value".to_vec())
+                .with_left_child(b"left1".to_vec())
+                .with_right_child(b"right1".to_vec()),
+        );
+        subtree.insert(
+            b"right1".to_vec(),
+            Node::new_item(b"right1_value".to_vec())
+                .with_left_child(b"left2".to_vec())
+                .with_right_child(b"right2".to_vec()),
+        );
+        subtree.insert(
+            b"left1".to_vec(),
+            Node::new_item(b"left1_value".to_vec()).with_right_child(b"right3".to_vec()),
+        );
+        subtree.insert(b"right2".to_vec(), Node::new_item(b"right2_value".to_vec()));
+        subtree.insert(
+            b"left2".to_vec(),
+            Node::new_item(b"left2_value".to_vec())
+                .with_left_child(b"left4".to_vec())
+                .with_right_child(b"right4".to_vec()),
+        );
+        subtree.insert(b"right3".to_vec(), Node::new_item(b"right3_value".to_vec()));
+        subtree.insert(b"right4".to_vec(), Node::new_item(b"right4_value".to_vec()));
+        subtree.insert(b"left4".to_vec(), Node::new_item(b"right4_value".to_vec()));
 
-//         subtree
-//     }
+        subtree
+    }
 
-//     #[test]
-//     fn simple_sequential_insertion_subtree() {
-//         let subtree = sample_tree();
+    #[test]
+    fn simple_sequential_insertion_subtree() {
+        let path_ctx = PathCtx::new();
+        let subtree = sample_tree(&path_ctx);
 
-//         assert!(subtree.waitlist.is_empty());
-//         assert!(subtree.cluster_roots.is_empty());
-//     }
+        assert!(subtree.waitlist.is_empty());
+        assert!(subtree.cluster_roots.is_empty());
+    }
 
-//     #[test]
-//     fn subtree_node_leaf_removal() {
-//         let mut subtree = sample_tree();
+    #[test]
+    fn subtree_node_leaf_removal() {
+        let path_ctx = PathCtx::new();
+        let mut subtree = sample_tree(&path_ctx);
 
-//         // "Unloading" a node from subtree, meaning it will be missed
-//         subtree.remove(b"left4");
+        // "Unloading" a node from subtree, meaning it will be missed
+        subtree.remove(b"left4");
 
-//         assert!(!subtree.nodes.contains_key(b"left4".as_ref()));
-//         assert_eq!(
-//             subtree.waitlist.iter().next().map(|k| k.as_slice()),
-//             Some(b"left4".as_ref())
-//         );
-//         assert!(subtree.cluster_roots.is_empty());
-//     }
+        assert!(!subtree.nodes.contains_key(b"left4".as_ref()));
+        assert_eq!(
+            subtree.waitlist.iter().next().map(|k| k.as_slice()),
+            Some(b"left4".as_ref())
+        );
+        assert!(subtree.cluster_roots.is_empty());
+    }
 
-//     #[test]
-//     fn subtree_node_leaf_complete_removal() {
-//         let mut subtree = sample_tree();
+    #[test]
+    fn subtree_node_leaf_complete_removal() {
+        let path_ctx = PathCtx::new();
+        let mut subtree = sample_tree(&path_ctx);
 
-//         // "Unloading" a node from subtree as well as update parent to not to
-// mention it         // anymore
-//         subtree.remove(b"left4");
-//         let mut old_parent =
-// subtree.nodes.get(b"left2".as_ref()).unwrap().clone();         old_parent.
-// left_child = None;         subtree.insert(b"left2".to_vec(), old_parent);
+        subtree.remove(b"left4");
+        let mut old_parent = subtree.nodes.get(b"left2".as_ref()).unwrap().clone();
+        old_parent.left_child = None;
+        subtree.insert(b"left2".to_vec(), old_parent);
 
-//         assert!(!subtree.nodes.contains_key(b"left4".as_ref()));
-//         assert!(subtree.waitlist.is_empty());
-//         assert!(subtree.cluster_roots.is_empty());
-//     }
+        assert!(!subtree.nodes.contains_key(b"left4".as_ref()));
+        assert!(subtree.waitlist.is_empty());
+        assert!(subtree.cluster_roots.is_empty());
+    }
 
-//     #[test]
-//     fn subtree_mid_node_delete_creates_clusters() {
-//         let mut subtree = sample_tree();
+    #[test]
+    fn subtree_mid_node_delete_creates_clusters() {
+        let path_ctx = PathCtx::new();
+        let mut subtree = sample_tree(&path_ctx);
 
-//         // Deleting a node in a middle of a subtree shall create clusters
-//         subtree.remove(b"right1");
+        // Deleting a node in a middle of a subtree shall create clusters
+        subtree.remove(b"right1");
 
-//         assert!(!subtree.nodes.contains_key(b"right1".as_ref()));
-//         assert_eq!(
-//             subtree.waitlist.iter().next().map(|k| k.as_slice()),
-//             Some(b"right1".as_ref())
-//         );
-//         assert_eq!(
-//             subtree.cluster_roots,
-//             [b"right2".to_vec(), b"left2".to_vec()]
-//                 .into_iter()
-//                 .collect()
-//         );
+        assert!(!subtree.nodes.contains_key(b"right1".as_ref()));
+        assert_eq!(
+            subtree.waitlist.iter().next().map(|k| k.as_slice()),
+            Some(b"right1".as_ref())
+        );
+        assert_eq!(
+            subtree.cluster_roots,
+            [b"right2".to_vec(), b"left2".to_vec()]
+                .into_iter()
+                .collect()
+        );
 
-//         // Adding (fetching) it back shall return the subtree into original
-// state         subtree.insert(
-//             b"right1".to_vec(),
-//             Node::new_item(b"right1_value".to_vec())
-//                 .with_left_child(b"left2".to_vec())
-//                 .with_right_child(b"right2".to_vec()),
-//         );
+        // Adding (fetching) it back shall return the subtree into original state
+        subtree.insert(
+            b"right1".to_vec(),
+            Node::new_item(b"right1_value".to_vec())
+                .with_left_child(b"left2".to_vec())
+                .with_right_child(b"right2".to_vec()),
+        );
 
-//         assert_eq!(subtree, sample_tree());
-//     }
+        let path_ctx2 = PathCtx::new();
+        assert_eq!(subtree, sample_tree(&path_ctx2));
+    }
 
-//     #[test]
-//     fn model_populate_subtrees_chain() {
-//         let mut model = Tree::new();
-//         assert!(model.subtrees.is_empty());
+    #[test]
+    fn model_populate_subtrees_chain() {
+        let path_ctx = PathCtx::new();
+        let mut model = Tree::new(&path_ctx);
+        assert!(model.subtrees.is_empty());
 
-//         model.populate_subtrees_chain(
-//             vec![b"1".to_vec(), b"2".to_vec(), b"3".to_vec(),
-// b"4".to_vec()].into(),         );
+        model.populate_subtrees_chain(path_ctx.add_iter([b"1", b"2", b"3", b"4"]));
 
-//         assert!(matches!(
-//             model
-//                 .subtrees
-//                 .get([].as_ref())
-//                 .unwrap()
-//                 .nodes
-//                 .first_key_value()
-//                 .map(|(k, v)| (k.as_slice(), v))
-//                 .unwrap(),
-//             (
-//                 b"1",
-//                 &Node {
-//                     element: Element::SubtreePlaceholder,
-//                     ..
-//                 }
-//             )
-//         ));
+        assert!(matches!(
+            model
+                .subtrees
+                .get(&path_ctx.get_root())
+                .unwrap()
+                .nodes
+                .first_key_value()
+                .map(|(k, v)| (k.as_slice(), v))
+                .unwrap(),
+            (
+                b"1",
+                &Node {
+                    element: Element::SubtreePlaceholder,
+                    ..
+                }
+            )
+        ));
 
-//         assert!(matches!(
-//             model
-//                 .subtrees
-//                 .get([b"1".to_vec()].as_ref())
-//                 .unwrap()
-//                 .nodes
-//                 .first_key_value()
-//                 .map(|(k, v)| (k.as_slice(), v))
-//                 .unwrap(),
-//             (
-//                 b"2",
-//                 &Node {
-//                     element: Element::SubtreePlaceholder,
-//                     ..
-//                 }
-//             )
-//         ));
+        assert!(matches!(
+            model
+                .subtrees
+                .get(&path_ctx.add_iter([b"1"]))
+                .unwrap()
+                .nodes
+                .first_key_value()
+                .map(|(k, v)| (k.as_slice(), v))
+                .unwrap(),
+            (
+                b"2",
+                &Node {
+                    element: Element::SubtreePlaceholder,
+                    ..
+                }
+            )
+        ));
 
-//         assert!(model
-//             .subtrees
-//             .get([b"1".to_vec(), b"2".to_vec(), b"3".to_vec(),
-// b"4".to_vec(),].as_ref())             .unwrap()
-//             .nodes
-//             .first_key_value()
-//             .is_none());
-//     }
+        assert!(model
+            .subtrees
+            .get(&path_ctx.add_iter([b"1", b"2", b"3", b"4"]))
+            .unwrap()
+            .nodes
+            .first_key_value()
+            .is_none());
+    }
 
-//     #[test]
-//     fn model_insert_nested_sumtree_node_at_empty() {
-//         // Simulating the case when the first update is actually not a
-// GroveDb         // root
-//         let mut model = Tree::new();
+    #[test]
+    fn model_insert_nested_sumtree_node_at_empty() {
+        // Simulating the case when the first update is actually not a GroveDb root
+        let path_ctx = PathCtx::new();
+        let mut model = Tree::new(&path_ctx);
 
-//         // Insert two deeply nested nodes that share no path segment except
-// root...         model.insert(
-//             vec![b"hello".to_vec(), b"world".to_vec()].into(),
-//             b"sumtree".to_vec(),
-//             Node::new_sumtree(b"yeet".to_vec().into(), 0),
-//         );
-//         model.insert(
-//             vec![b"top".to_vec(), b"kek".to_vec()].into(),
-//             b"subtree".to_vec(),
-//             Node::new_subtree(b"swag".to_vec().into()),
-//         );
+        // Insert two deeply nested nodes that share no path segment except root...
+        model.insert(
+            path_ctx.add_iter([b"hello", b"world"]),
+            b"sumtree".to_vec(),
+            Node::new_sumtree(b"yeet".to_vec().into(), 0),
+        );
 
-//         // ...that means the root subtree will have two subtree placeholder
-// nodes,         // both will be cluster roots because no connections are yet
-// known         assert_eq!(
-//             model.subtrees.get([].as_ref()).unwrap().cluster_roots.len(),
-//             2
-//         );
+        model.insert(
+            path_ctx.add_iter([b"top", b"kek"]),
+            b"subtree".to_vec(),
+            Node::new_subtree(b"swag".to_vec().into()),
+        );
 
-//         // Adding a node for a root subtree, that will have aforementioned
-// placeholder         // nodes as its left and right children
-//         model.insert(
-//             vec![].into(),
-//             b"very_root".to_vec(),
-//             Node::new_item(b"very_root_value".to_vec())
-//                 .with_left_child(b"hello".to_vec())
-//                 .with_right_child(b"top".to_vec()),
-//         );
+        // ...that means the root subtree will have two subtree placeholder
+        // nodes, both will be cluster roots because no connections are yet known
+        assert_eq!(
+            model
+                .subtrees
+                .get(&path_ctx.get_root())
+                .unwrap()
+                .cluster_roots
+                .len(),
+            2
+        );
 
-//         // And setting it as a root, so it will no longer be a cluster but a
-// proper tree         // root
-//         model
-//             .subtrees
-//             .get_mut([].as_ref())
-//             .unwrap()
-//             .set_root(b"very_root".to_vec());
+        // Adding a node for a root subtree, that will have aforementioned
+        // placeholder nodes as its left and right children
+        model.insert(
+            path_ctx.get_root(),
+            b"very_root".to_vec(),
+            Node::new_item(b"very_root_value".to_vec())
+                .with_left_child(b"hello".to_vec())
+                .with_right_child(b"top".to_vec()),
+        );
 
-//         assert!(model
-//             .subtrees
-//             .get([].as_ref())
-//             .unwrap()
-//             .cluster_roots
-//             .is_empty());
+        // And setting it as a root, so it will no longer be a cluster but a
+        // proper tree root
+        model
+            .subtrees
+            .get_mut(&path_ctx.get_root())
+            .unwrap()
+            .set_root(b"very_root".to_vec());
 
-//         // Insert a subtree after a root sutree to check levels vec, also
-// creates a         // cluster since no connections to this key exist
-//         model.insert(
-//             [].to_vec().into(),
-//             b"yay".to_vec(),
-//             Node::new_subtree(b"kek".to_vec().into()),
-//         );
-
-//         assert_eq!(
-//             model.levels(),
-//             LevelsInfo {
-//                 widest_level_idx: 0,
-//                 levels_info: vec![
-//                     LevelInfo {
-//                         n_subtrees: 1,
-//                         max_subtree_size: 4,
-//                         max_clusters: 2
-//                     },
-//                     LevelInfo {
-//                         n_subtrees: 3,
-//                         max_subtree_size: 1,
-//                         max_clusters: 1
-//                     },
-//                     LevelInfo {
-//                         n_subtrees: 2,
-//                         max_subtree_size: 1,
-//                         max_clusters: 1
-//                     },
-//                     LevelInfo {
-//                         n_subtrees: 2,
-//                         max_subtree_size: 0,
-//                         max_clusters: 1
-//                     },
-//                 ]
-//             }
-//         );
-//     }
-// }
+        assert!(model
+            .subtrees
+            .get(&path_ctx.get_root())
+            .unwrap()
+            .cluster_roots
+            .is_empty());
+    }
+}

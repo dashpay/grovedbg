@@ -45,6 +45,18 @@ impl PathCtx {
         }
         current_path
     }
+
+    pub fn add_iter<S, I>(&self, path: I) -> Path
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<[u8]>,
+    {
+        let mut current_path = self.get_root();
+        for segment in path.into_iter() {
+            current_path = current_path.child(segment.as_ref().to_vec());
+        }
+        current_path
+    }
 }
 
 pub(crate) struct PathSegment {
