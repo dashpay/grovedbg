@@ -6,6 +6,7 @@ use eframe::{
     egui::{self, Label, Response, RichText, Sense},
     epaint::Color32,
 };
+use integer_encoding::VarInt;
 
 use crate::model::path_display::Path;
 
@@ -46,12 +47,19 @@ pub(crate) fn bytes_as_int(bytes: &[u8]) -> String {
     }
 }
 
+fn bytes_as_varint(bytes: &[u8]) -> String {
+    i64::decode_var(bytes)
+        .map(|(x, _)| x.to_string())
+        .unwrap_or_else(|| "varint: MSB".to_owned())
+}
+
 pub(crate) fn bytes_by_display_variant(bytes: &[u8], display_variant: &DisplayVariant) -> String {
     match display_variant {
         DisplayVariant::U8 => bytes_as_slice(bytes),
         DisplayVariant::String => String::from_utf8_lossy(bytes).to_string(),
         DisplayVariant::Hex => bytes_as_hex(bytes),
         DisplayVariant::Int => bytes_as_int(bytes),
+        DisplayVariant::VarInt => bytes_as_varint(bytes),
     }
 }
 
@@ -78,6 +86,7 @@ fn display_variant_dropdown<'a>(
         menu.radio_value(display_variant, DisplayVariant::String, "UTF-8 String");
         menu.radio_value(display_variant, DisplayVariant::Hex, "Hex String");
         menu.radio_value(display_variant, DisplayVariant::Int, "i64");
+        menu.radio_value(display_variant, DisplayVariant::VarInt, "VarInt");
     });
     response
 }
@@ -97,6 +106,7 @@ pub(crate) enum DisplayVariant {
     String,
     Hex,
     Int,
+    VarInt,
 }
 
 impl DisplayVariant {
