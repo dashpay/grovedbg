@@ -1503,6 +1503,7 @@ dependencies = [
  "eframe",
  "grovedbg-types",
  "hex",
+ "integer-encoding",
  "log",
  "reqwest",
  "slab",
@@ -1747,6 +1748,12 @@ checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
 dependencies = [
  "cfg-if",
 ]
+
+[[package]]
+name = "integer-encoding"
+version = "4.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "924df4f0e24e2e7f9cdd90babb0b96f93b20f3ecfa949ea9e6613756b8c8e1bf"
 
 [[package]]
 name = "io-lifetimes"

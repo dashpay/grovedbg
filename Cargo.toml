@@ -9,6 +9,7 @@ edition = "2021"
 eframe = "0.27.2"
 grovedbg-types = { git = "https://github.com/dashpay/grovedb", branch = "grove-dbg" }
 hex = "0.4.3"
+integer-encoding = "4.0.0"
 log = "0.4.21"
 reqwest = { version = "0.12.4", features = ["json"] }
 slab = "0.4.9"
