@@ -633,6 +633,11 @@ pub(crate) struct NodeCtx<'a, 'c> {
 }
 
 impl<'a, 'c> NodeCtx<'a, 'c> {
+    pub(crate) fn child_subtree_ctx(&self) -> Option<SubtreeCtx<'a, 'c>> {
+        let path = self.path.child(self.key().to_vec());
+        self.subtree_ctx.tree.get_subtree(&path)
+    }
+
     pub(crate) fn path(&self) -> Path {
         self.path
     }

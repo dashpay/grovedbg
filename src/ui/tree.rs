@@ -3,7 +3,7 @@
 use std::{cmp, collections::VecDeque};
 
 use eframe::{
-    egui::{self, Id},
+    egui::{self, Id, Vec2},
     emath::TSTransform,
     epaint::{Color32, Pos2, Rect, Stroke},
 };
@@ -27,18 +27,18 @@ const CELL_Y: f32 = 200.0;
 const KV_PER_PAGE: usize = 10;
 
 pub(crate) struct TreeDrawer<'u, 't, 'c> {
-    ui: &'u mut egui::Ui,
-    transform: TSTransform,
-    rect: Rect,
-    references: Vec<(Pos2, Path<'t>, Key)>,
-    tree: &'t Tree<'c>,
-    sender: &'t Sender<Message>,
+    pub(crate) ui: &'u mut egui::Ui,
+    pub(crate) transform: &'u mut TSTransform,
+    pub(crate) rect: Rect,
+    pub(crate) references: Vec<(Pos2, Path<'t>, Key)>,
+    pub(crate) tree: &'t Tree<'c>,
+    pub(crate) sender: &'t Sender<Message>,
 }
 
 impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
     pub(crate) fn new(
         ui: &'u mut egui::Ui,
-        transform: TSTransform,
+        transform: &'u mut TSTransform,
         rect: Rect,
         tree: &'t Tree<'c>,
         sender: &'t Sender<Message>,
@@ -75,7 +75,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                     );
                 }
 
-                draw_node(ui, self.sender, node_ctx);
+                draw_node(ui, &mut self.transform, self.sender, node_ctx);
             })
             .response;
 
@@ -88,7 +88,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
         };
         self.ui
             .ctx()
-            .set_transform_layer(layer_response.layer_id, self.transform);
+            .set_transform_layer(layer_response.layer_id, self.transform.clone());
     }
 
     fn draw_subtree_part(
@@ -269,42 +269,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                                 }
                             }
 
-                            let color = element_to_color(&node_ctx.node().element);
-
-                            ui.horizontal(|key_line| {
-                                if matches!(
-                                    node_ctx.node().element,
-                                    Element::Subtree { .. } | Element::Sumtree { .. }
-                                ) {
-                                    let prev_visibility =
-                                        subtree_ctx.is_child_visible(node_ctx.key());
-                                    let mut visibility = prev_visibility;
-                                    key_line.checkbox(&mut visibility, "");
-                                    if prev_visibility != visibility {
-                                        subtree_ctx
-                                            .set_child_visibility(node_ctx.key(), visibility);
-                                    }
-                                }
-
-                                node_ctx.with_key_display_variant(|display_variant| {
-                                    binary_label_colored(
-                                        key_line,
-                                        node_ctx.key(),
-                                        display_variant,
-                                        color,
-                                    )
-                                })
-                            });
-
-                            if matches!(
-                                node_ctx.node().element,
-                                Element::Item { .. }
-                                    | Element::SumItem { .. }
-                                    | Element::Sumtree { .. }
-                                    | Element::Reference { .. }
-                            ) {
-                                draw_element(ui, &node_ctx);
-                            }
+                            draw_element(ui, &mut self.transform, &node_ctx);
 
                             ui.allocate_ui(
                                 egui::Vec2 {
@@ -343,7 +308,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
 
         self.ui
             .ctx()
-            .set_transform_layer(layer_response.layer_id, self.transform);
+            .set_transform_layer(layer_response.layer_id, self.transform.clone());
     }
 
     fn draw_subtree_expanded(&mut self, coords: (i64, usize), subtree_ctx: SubtreeCtx<'t, 't>) {
@@ -413,7 +378,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                         .response;
                     self.ui
                         .ctx()
-                        .set_transform_layer(layer_response.layer_id, self.transform);
+                        .set_transform_layer(layer_response.layer_id, self.transform.clone());
                 }
 
                 current_children_x += child.subtree().width() as i64 + 1;
@@ -449,6 +414,6 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
             .response;
         self.ui
             .ctx()
-            .set_transform_layer(layer_response.layer_id, self.transform);
+            .set_transform_layer(layer_response.layer_id, self.transform.clone());
     }
 }

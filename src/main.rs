@@ -69,7 +69,7 @@ impl<'c> App<'c> {
 }
 
 impl<'c> eframe::App for App<'c> {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ctx.set_visuals(Visuals::dark());
 
@@ -113,11 +113,9 @@ impl<'c> eframe::App for App<'c> {
 
             {
                 let lock = self.tree.lock().unwrap();
-                let drawer = TreeDrawer::new(ui, self.transform, rect, &lock, &self.sender);
+                let drawer = TreeDrawer::new(ui, &mut self.transform, rect, &lock, &self.sender);
                 drawer.draw_tree();
             }
-
-            // draw_legend(ui);
         });
     }
 }
