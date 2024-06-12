@@ -21,8 +21,8 @@ use crate::{
     },
 };
 
-const CELL_X: f32 = 300.0;
-const CELL_Y: f32 = 200.0;
+pub(crate) const CELL_X: f32 = 300.0;
+pub(crate) const CELL_Y: f32 = 200.0;
 
 const KV_PER_PAGE: usize = 10;
 
@@ -271,13 +271,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
 
                             draw_element(ui, &mut self.transform, &node_ctx);
 
-                            ui.allocate_ui(
-                                egui::Vec2 {
-                                    x: COLLAPSED_SUBTREE_WIDTH - 50.,
-                                    y: 10.0,
-                                },
-                                |ui| ui.separator(),
-                            );
+                            ui.allocate_ui(egui::Vec2 { x: CELL_X, y: 10.0 }, |ui| ui.separator());
                         }
 
                         if subtree.nodes.len() > KV_PER_PAGE {
