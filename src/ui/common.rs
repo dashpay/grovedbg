@@ -11,8 +11,8 @@ use integer_encoding::VarInt;
 use crate::model::path_display::Path;
 
 const MAX_BYTES: usize = 10;
-const MAX_HEX_LENGTH: usize = 64;
-const HEX_PARTS_LENGTH: usize = 20;
+const MAX_HEX_LENGTH: usize = 32;
+const HEX_PARTS_LENGTH: usize = 12;
 
 fn bytes_as_slice(bytes: &[u8]) -> String {
     if bytes.len() <= MAX_BYTES {
@@ -80,7 +80,11 @@ fn display_variant_dropdown<'a>(
     display_variant: &mut DisplayVariant,
     color: Color32,
 ) -> Response {
-    let response = ui.add(Label::new(RichText::new(text).color(color)).sense(Sense::click()));
+    let response = ui.add(
+        Label::new(RichText::new(text).color(color))
+            .truncate(true)
+            .sense(Sense::click()),
+    );
     response.context_menu(|menu| {
         menu.radio_value(display_variant, DisplayVariant::U8, "u8 array");
         menu.radio_value(display_variant, DisplayVariant::String, "UTF-8 String");

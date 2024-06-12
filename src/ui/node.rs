@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use eframe::{
-    egui::{self, Vec2},
+    egui::{self, Layout, Response, Vec2},
     emath::TSTransform,
     epaint::{Color32, Stroke},
 };
@@ -9,6 +9,7 @@ use tokio::sync::mpsc::Sender;
 
 use super::{
     common::{binary_label, binary_label_colored, bytes_by_display_variant, path_label},
+    tree::CELL_X,
     DisplayVariant, TreeDrawer,
 };
 use crate::{
@@ -128,32 +129,34 @@ pub(crate) fn draw_element(ui: &mut egui::Ui, transform: &mut TSTransform, node_
 
     // Draw value
     let node = node_ctx.node();
-    match &node.element {
-        Element::Item { value } => {
-            binary_label(
-                ui,
+
+    let layout = Layout::left_to_right(egui::Align::Min);
+    ui.allocate_ui_with_layout(
+        Vec2::new(CELL_X, 20.),
+        layout,
+        |value_ui: &mut egui::Ui| match &node.element {
+            Element::Item { value } => binary_label(
+                value_ui,
                 value,
                 &mut node.ui_state.borrow_mut().item_display_variant,
-            );
-        }
-        Element::SumItem { value } => {
-            ui.label(format!("Value: {value}"));
-        }
-        Element::Reference { path, key } => {
-            path_label(ui, *path);
-            ui.horizontal(|line| {
-                line.add_space(20.0);
-                line.label(bytes_by_display_variant(
-                    key,
-                    &mut node.ui_state.borrow_mut().item_display_variant,
-                ));
-            });
-        }
-        Element::Sumtree { sum, .. } => {
-            ui.label(format!("Sum: {sum}"));
-        }
-        _ => {}
-    }
+            ),
+            Element::SumItem { value } => value_ui.label(format!("Value: {value}")),
+            Element::Reference { path, key } => {
+                path_label(value_ui, *path);
+                value_ui
+                    .horizontal(|line| {
+                        line.add_space(20.0);
+                        line.label(bytes_by_display_variant(
+                            key,
+                            &mut node.ui_state.borrow_mut().item_display_variant,
+                        ));
+                    })
+                    .response
+            }
+            Element::Sumtree { sum, .. } => value_ui.label(format!("Sum: {sum}")),
+            Element::Subtree { .. } | Element::SubtreePlaceholder => value_ui.label("Subtree"),
+        },
+    );
 }
 
 pub(crate) fn element_to_color(element: &Element) -> Color32 {
