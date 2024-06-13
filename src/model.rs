@@ -290,6 +290,10 @@ impl<'c> Subtree<'c> {
         }
     }
 
+    pub(crate) fn first_page(&self) {
+        self.ui_state.borrow_mut().page = 0;
+    }
+
     pub(crate) fn n_nodes(&self) -> usize {
         self.nodes.len()
     }

@@ -1,9 +1,6 @@
 mod proto_conversion;
 
-use std::{
-    collections::VecDeque,
-    sync::{Arc, Mutex},
-};
+use std::{collections::VecDeque, sync::Mutex};
 
 use grovedbg_types::{NodeFetchRequest, NodeUpdate, RootFetchRequest};
 use reqwest::Client;
@@ -16,17 +13,29 @@ type Path = Vec<Vec<u8>>;
 
 pub(crate) enum Message {
     FetchRoot,
-    FetchNode { path: Path, key: Key },
-    FetchBranch { path: Path, key: Key },
-    UnloadSubtree { path: Path },
+    FetchNode {
+        path: Path,
+        key: Key,
+    },
+    FetchBranch {
+        path: Path,
+        key: Key,
+        limit: FetchLimit,
+    },
+    UnloadSubtree {
+        path: Path,
+    },
+}
+
+pub(crate) enum FetchLimit {
+    Unbounded,
+    Count(usize),
 }
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum FetchError {
     #[error(transparent)]
     DataError(#[from] BadProtoElement),
-    // #[error("tonic fetch error: {0}")]
-    // TransportError(#[from] grovedbg_grpc::tonic::Status),
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -93,13 +102,18 @@ pub(crate) async fn process_messages<'c>(
                     from_update(path_ctx, node_update).unwrap(),
                 );
             }
-            Message::FetchBranch { path, key } => {
+            Message::FetchBranch { path, key, limit } => {
                 let mut queue = VecDeque::new();
                 queue.push_back(key.clone());
 
                 let mut to_insert = Vec::new();
 
                 while let Some(node_key) = queue.pop_front() {
+                    if let FetchLimit::Count(max_n) = limit {
+                        if to_insert.len() >= max_n {
+                            break;
+                        }
+                    }
                     let Some(node_update) = client
                         .post(format!("{}/fetch_node", base_url()))
                         .json(&NodeFetchRequest {

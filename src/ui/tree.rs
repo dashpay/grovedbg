@@ -14,7 +14,7 @@ use super::{
     node::{draw_element, draw_node, element_to_color},
 };
 use crate::{
-    fetch::Message,
+    fetch::{FetchLimit, Message},
     model::{
         alignment::COLLAPSED_SUBTREE_WIDTH, path_display::Path, Element, Key, KeySlice, NodeCtx,
         SubtreeCtx, Tree,
@@ -223,6 +223,18 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                                     let _ = self.sender.blocking_send(Message::FetchBranch {
                                         path: subtree_ctx.path().to_vec(),
                                         key: key.clone(),
+                                        limit: FetchLimit::Unbounded,
+                                    });
+                                }
+                            }
+
+                            if menu.button("Fetch first 100").clicked() {
+                                if let Some(key) = &subtree.root_node {
+                                    // TODO error handling
+                                    let _ = self.sender.blocking_send(Message::FetchBranch {
+                                        path: subtree_ctx.path().to_vec(),
+                                        key: key.clone(),
+                                        limit: FetchLimit::Count(100),
                                     });
                                 }
                             }
@@ -242,6 +254,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                                 let _ = self.sender.blocking_send(Message::UnloadSubtree {
                                     path: subtree_ctx.path().to_vec(),
                                 });
+                                subtree_ctx.subtree().first_page();
                             }
                         });
 
