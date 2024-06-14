@@ -53,15 +53,17 @@ pub(crate) fn draw_node<'a, 'c>(
                     .clicked()
                 {
                     node_ctx.set_left_visible();
-                    sender.blocking_send(Message::FetchNode {
-                        path: node_ctx.path().to_vec(),
-                        key: node_ctx
-                            .node()
-                            .left_child
-                            .as_ref()
-                            .expect("checked above")
-                            .clone(),
-                    });
+                    let _ = sender
+                        .blocking_send(Message::FetchNode {
+                            path: node_ctx.path().to_vec(),
+                            key: node_ctx
+                                .node()
+                                .left_child
+                                .as_ref()
+                                .expect("checked above")
+                                .clone(),
+                        })
+                        .inspect_err(|_| log::error!("Can't reach data fetching thread"));
                 }
                 footer.label("|");
                 if footer
@@ -73,15 +75,17 @@ pub(crate) fn draw_node<'a, 'c>(
                 {
                     node_ctx.set_right_visible();
 
-                    sender.blocking_send(Message::FetchNode {
-                        path: node_ctx.path().to_vec(),
-                        key: node_ctx
-                            .node()
-                            .right_child
-                            .as_ref()
-                            .expect("checked above")
-                            .clone(),
-                    });
+                    let _ = sender
+                        .blocking_send(Message::FetchNode {
+                            path: node_ctx.path().to_vec(),
+                            key: node_ctx
+                                .node()
+                                .right_child
+                                .as_ref()
+                                .expect("checked above")
+                                .clone(),
+                        })
+                        .inspect_err(|_| log::error!("Can't reach data fetching thread"));
                 }
             });
         })
@@ -105,7 +109,7 @@ pub(crate) fn draw_element(ui: &mut egui::Ui, transform: &mut TSTransform, node_
                         .child_subtree_ctx()
                         .map(|ctx| ctx.subtree().get_subtree_input_point())
                         .flatten()
-                        .map(|point| point.to_vec2() + Vec2::new(-1000., -500.))
+                        .map(|point| point.to_vec2() + Vec2::new(-1500., -900.))
                         .unwrap_or_default(),
                 )
                 .inverse();

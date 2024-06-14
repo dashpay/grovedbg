@@ -4,9 +4,12 @@ mod model;
 mod test_utils;
 mod ui;
 
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
-use eframe::egui::{self, emath::TSTransform, Visuals};
+use eframe::egui::{self, emath::TSTransform, Vec2, Visuals};
 use fetch::Message;
 use model::path_display::PathCtx;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -18,6 +21,7 @@ fn main() {}
 
 #[cfg(target_arch = "wasm32")]
 fn main() {
+    egui_logger::init().unwrap();
     eframe::WebLogger::init(log::LevelFilter::Debug).ok();
 
     let web_options = eframe::WebOptions::default();
@@ -60,7 +64,7 @@ impl<'c> App<'c> {
         sender: Sender<Message>,
     ) -> Self {
         App {
-            transform: Default::default(),
+            transform: TSTransform::from_translation(Vec2::new(1000., 500.)),
             tree,
             path_ctx,
             sender,
@@ -116,6 +120,15 @@ impl<'c> eframe::App for App<'c> {
                 let drawer = TreeDrawer::new(ui, &mut self.transform, rect, &lock, &self.sender);
                 drawer.draw_tree();
             }
+
+            egui::Window::new("Log")
+                .default_pos((0., 100.))
+                .show(ctx, |ui| {
+                    // draws the logger ui.
+                    egui_logger::logger_ui(ui);
+                });
+
+            ctx.request_repaint_after(Duration::from_secs(5));
         });
     }
 }
