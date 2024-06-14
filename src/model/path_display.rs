@@ -1,14 +1,14 @@
 use std::{
     cell::RefCell,
     collections::VecDeque,
-    fmt,
+    fmt::{self, Display},
     hash::{Hash, Hasher},
     iter, ptr,
 };
 
 use slab::Slab;
 
-use crate::ui::DisplayVariant;
+use crate::ui::{common::bytes_by_display_variant, DisplayVariant};
 
 type SegmentId = usize;
 
@@ -110,7 +110,23 @@ impl Eq for Path<'_> {}
 // TODO: comparing paths of different slabs makes no sence
 impl Ord for Path<'_> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).expect("paths of different ctxes")
+        self.partial_cmp(other).unwrap()
+    }
+}
+
+impl Display for Path<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("[");
+        self.for_segments(|segments_iter| {
+            for segment in segments_iter {
+                f.write_str(&bytes_by_display_variant(
+                    segment.bytes(),
+                    &segment.display(),
+                ));
+            }
+        });
+        f.write_str("]");
+        Ok(())
     }
 }
 

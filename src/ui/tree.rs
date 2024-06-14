@@ -1,24 +1,21 @@
 //! Tree structure UI module
 
-use std::{cmp, collections::VecDeque};
+use std::collections::VecDeque;
 
 use eframe::{
-    egui::{self, Id, Vec2},
+    egui::{self, Id},
     emath::TSTransform,
     epaint::{Color32, Pos2, Rect, Stroke},
 };
 use tokio::sync::mpsc::Sender;
 
 use super::{
-    common::{binary_label_colored, path_label},
-    node::{draw_element, draw_node, element_to_color},
+    common::path_label,
+    node::{draw_element, draw_node},
 };
 use crate::{
     fetch::{FetchLimit, Message},
-    model::{
-        alignment::COLLAPSED_SUBTREE_WIDTH, path_display::Path, Element, Key, KeySlice, NodeCtx,
-        SubtreeCtx, Tree,
-    },
+    model::{path_display::Path, Element, Key, KeySlice, NodeCtx, SubtreeCtx, Tree},
 };
 
 pub(crate) const CELL_X: f32 = 300.0;
@@ -219,41 +216,57 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
 
                             if menu.button("Fetch all").clicked() {
                                 if let Some(key) = &subtree.root_node {
-                                    // TODO error handling
-                                    let _ = self.sender.blocking_send(Message::FetchBranch {
-                                        path: subtree_ctx.path().to_vec(),
-                                        key: key.clone(),
-                                        limit: FetchLimit::Unbounded,
-                                    });
+                                    let _ = self
+                                        .sender
+                                        .blocking_send(Message::FetchBranch {
+                                            path: subtree_ctx.path().to_vec(),
+                                            key: key.clone(),
+                                            limit: FetchLimit::Unbounded,
+                                        })
+                                        .inspect_err(|_| {
+                                            log::error!("Can't reach data fetching thread")
+                                        });
                                 }
                             }
 
                             if menu.button("Fetch first 100").clicked() {
                                 if let Some(key) = &subtree.root_node {
-                                    // TODO error handling
-                                    let _ = self.sender.blocking_send(Message::FetchBranch {
-                                        path: subtree_ctx.path().to_vec(),
-                                        key: key.clone(),
-                                        limit: FetchLimit::Count(100),
-                                    });
+                                    let _ = self
+                                        .sender
+                                        .blocking_send(Message::FetchBranch {
+                                            path: subtree_ctx.path().to_vec(),
+                                            key: key.clone(),
+                                            limit: FetchLimit::Count(100),
+                                        })
+                                        .inspect_err(|_| {
+                                            log::error!("Can't reach data fetching thread");
+                                        });
                                 }
                             }
 
                             if let Some(key) = &subtree.root_node {
                                 if menu.button("Fetch root").clicked() {
-                                    // TODO error handling
-                                    let _ = self.sender.blocking_send(Message::FetchNode {
-                                        path: subtree_ctx.path().to_vec(),
-                                        key: key.clone(),
-                                    });
+                                    let _ = self
+                                        .sender
+                                        .blocking_send(Message::FetchNode {
+                                            path: subtree_ctx.path().to_vec(),
+                                            key: key.clone(),
+                                        })
+                                        .inspect_err(|_| {
+                                            log::error!("Can't reach data fetching thread")
+                                        });
                                 }
                             }
 
                             if menu.button("Unload").clicked() {
-                                // TODO error handling
-                                let _ = self.sender.blocking_send(Message::UnloadSubtree {
-                                    path: subtree_ctx.path().to_vec(),
-                                });
+                                let _ = self
+                                    .sender
+                                    .blocking_send(Message::UnloadSubtree {
+                                        path: subtree_ctx.path().to_vec(),
+                                    })
+                                    .inspect_err(|_| {
+                                        log::error!("Can't reach data fetching thread")
+                                    });
                                 subtree_ctx.subtree().first_page();
                             }
                         });
