@@ -17,18 +17,9 @@ type Path = Vec<Vec<u8>>;
 
 pub(crate) enum Message {
     FetchRoot,
-    FetchNode {
-        path: Path,
-        key: Key,
-    },
-    FetchBranch {
-        path: Path,
-        key: Key,
-        limit: FetchLimit,
-    },
-    UnloadSubtree {
-        path: Path,
-    },
+    FetchNode { path: Path, key: Key },
+    FetchBranch { path: Path, key: Key, limit: FetchLimit },
+    UnloadSubtree { path: Path },
 }
 
 pub(crate) enum FetchLimit {
@@ -96,11 +87,7 @@ async fn process_message<'c>(
                 return Ok(());
             };
             let mut lock = tree.lock().unwrap();
-            lock.insert(
-                path_ctx.add_path(path),
-                key,
-                from_update(path_ctx, node_update)?,
-            );
+            lock.insert(path_ctx.add_path(path), key, from_update(path_ctx, node_update)?);
         }
         Message::FetchBranch { path, key, limit } => {
             log::info!("Fetching subtree branch...");
@@ -124,9 +111,7 @@ async fn process_message<'c>(
                     .send()
                     .and_then(|response| response.json::<Option<NodeUpdate>>())
                     .await
-                    .map_err(|e| {
-                        log::error!("Branch fetching error: {}; attempting to load others...", e)
-                    })
+                    .map_err(|e| log::error!("Branch fetching error: {}; attempting to load others...", e))
                 else {
                     continue;
                 };

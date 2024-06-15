@@ -46,6 +46,15 @@ impl PathCtx {
         current_path
     }
 
+    pub fn add_profiles_alias(&self, path: Vec<Vec<u8>>, profiles_alias: String) -> Path {
+        let path = self.add_path(path);
+        if let Some(id) = path.head_slab_id {
+            let mut slab = self.slab.borrow_mut();
+            slab[id].profiles_alias = Some(profiles_alias);
+        }
+        path
+    }
+
     pub fn add_iter<S, I>(&self, path: I) -> Path
     where
         I: IntoIterator<Item = S>,
@@ -65,6 +74,7 @@ pub(crate) struct PathSegment {
     bytes: Vec<u8>,
     display: DisplayVariant,
     level: usize,
+    profiles_alias: Option<String>,
 }
 
 impl PathSegment {
@@ -114,23 +124,18 @@ impl Ord for Path<'_> {
     }
 }
 
-impl Display for Path<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("[");
-        self.for_segments(|segments_iter| {
-            for segment in segments_iter {
-                f.write_str(&bytes_by_display_variant(
-                    segment.bytes(),
-                    &segment.display(),
-                ));
-            }
-        });
-        f.write_str("]");
-        Ok(())
-    }
-}
-
 impl<'c> Path<'c> {
+    pub fn get_profiles_alias(&self) -> Option<String> {
+        self.for_last_segment(|s| s.profiles_alias.clone()).flatten()
+    }
+
+    pub fn clear_profile_alias(&self) {
+        if let Some(id) = self.head_slab_id {
+            let mut slab = self.ctx.slab.borrow_mut();
+            slab[id].profiles_alias = None;
+        }
+    }
+
     pub fn level(&self) -> usize {
         self.for_last_segment(|k| k.level).unwrap_or_default()
     }
@@ -163,20 +168,14 @@ impl<'c> Path<'c> {
     pub fn child(&self, key: Vec<u8>) -> Path<'c> {
         let mut slab = self.ctx.slab.borrow_mut();
         let mut root_children = self.ctx.root_children_slab_ids.borrow_mut();
-        let level = self
-            .head_slab_id
-            .map(|id| slab[id].level)
-            .unwrap_or_default();
+        let level = self.head_slab_id.map(|id| slab[id].level).unwrap_or_default();
 
         if let Some(child_segment_id) = {
             let children_vec = self
                 .head_slab_id
                 .map(|id| &slab[id].children_slab_ids)
                 .unwrap_or(&root_children);
-            children_vec
-                .iter()
-                .find(|id| &slab[**id].bytes == &key)
-                .copied()
+            children_vec.iter().find(|id| &slab[**id].bytes == &key).copied()
         } {
             Path {
                 head_slab_id: Some(child_segment_id),
@@ -189,6 +188,7 @@ impl<'c> Path<'c> {
                 display: DisplayVariant::guess(&key),
                 bytes: key,
                 level: level + 1,
+                profiles_alias: None,
             });
             let children_vec = self
                 .head_slab_id
@@ -281,9 +281,7 @@ impl<'c> Path<'c> {
         } else {
             root_children.as_ref()
         };
-        let paths_iter: ChildPathsIter = iter::repeat(self.ctx)
-            .zip(children_vec.iter())
-            .map(id_to_path);
+        let paths_iter: ChildPathsIter = iter::repeat(self.ctx).zip(children_vec.iter()).map(id_to_path);
 
         f(paths_iter)
     }
@@ -357,8 +355,7 @@ mod tests {
         sub_1.child(b"key3".to_vec());
         let mut children: Vec<Vec<u8>> = Vec::new();
         sub_1.for_children(|children_iter| {
-            children
-                .extend(children_iter.map(|p| p.for_last_segment(|k| k.bytes().to_vec()).unwrap()))
+            children.extend(children_iter.map(|p| p.for_last_segment(|k| k.bytes().to_vec()).unwrap()))
         });
         assert_eq!(children, vec![b"key2", b"key3"]);
     }
@@ -374,9 +371,7 @@ mod tests {
             .child(b"key4".to_vec());
         let mut path_vec = Vec::new();
         path.for_segments(|segments_iter| {
-            path_vec = segments_iter
-                .map(|segment| segment.bytes().to_vec())
-                .collect()
+            path_vec = segments_iter.map(|segment| segment.bytes().to_vec()).collect()
         });
         assert_eq!(path_vec, vec![b"key1", b"key2", b"key3", b"key4"]);
         assert_eq!(path.level(), 4);
@@ -388,9 +383,7 @@ mod tests {
         let path = ctx.get_root();
         let mut path_vec = Vec::new();
         path.for_segments(|segments_iter| {
-            path_vec = segments_iter
-                .map(|segment| segment.bytes().to_vec())
-                .collect()
+            path_vec = segments_iter.map(|segment| segment.bytes().to_vec()).collect()
         });
         assert_eq!(path_vec, Vec::<Vec<u8>>::new());
         assert_eq!(path.level(), 0);

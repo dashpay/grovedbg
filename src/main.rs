@@ -1,5 +1,6 @@
 mod fetch;
 mod model;
+mod profiles;
 #[cfg(test)]
 mod test_utils;
 mod ui;
@@ -21,6 +22,8 @@ fn main() {}
 
 #[cfg(target_arch = "wasm32")]
 fn main() {
+    use profiles::drive_profile;
+
     egui_logger::init().unwrap();
     eframe::WebLogger::init(log::LevelFilter::Debug).ok();
 
@@ -28,6 +31,9 @@ fn main() {
 
     let (sender, receiver) = channel(10);
     let path_ctx: &'static PathCtx = Box::leak(Box::new(PathCtx::new()));
+
+    drive_profile().enable_profile(path_ctx);
+
     let tree: Arc<Mutex<Tree>> = Arc::new(Mutex::new(Tree::new(path_ctx)));
 
     let t = Arc::clone(&tree);
@@ -121,8 +127,13 @@ impl<'c> eframe::App for App<'c> {
                 drawer.draw_tree();
             }
 
-            egui::Window::new("Log")
-                .default_pos((0., 100.))
+            egui::Window::new("Log").default_pos((0., 100.)).show(ctx, |ui| {
+                // draws the logger ui.
+                egui_logger::logger_ui(ui);
+            });
+
+            egui::Window::new("Profiles")
+                .default_pos((0., 200.))
                 .show(ctx, |ui| {
                     // draws the logger ui.
                     egui_logger::logger_ui(ui);
