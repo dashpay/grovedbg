@@ -1,5 +1,6 @@
 unstable_features = true
 
+max_width = 110
 blank_lines_lower_bound = 0
 condense_wildcard_suffixes = true
 error_on_line_overflow = true

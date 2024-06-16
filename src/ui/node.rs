@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use eframe::{
-    egui::{self, Layout, Response, Vec2},
+    egui::{self, Label, Layout, Response, RichText, Vec2},
     emath::TSTransform,
     epaint::{Color32, Stroke},
 };
@@ -62,15 +62,13 @@ pub(crate) fn draw_node<'a, 'c>(
                                 .as_ref()
                                 .expect("checked above")
                                 .clone(),
+                            show: false,
                         })
                         .inspect_err(|_| log::error!("Can't reach data fetching thread"));
                 }
                 footer.label("|");
                 if footer
-                    .add_enabled(
-                        node_ctx.node().right_child.is_some(),
-                        egui::Button::new("➡"),
-                    )
+                    .add_enabled(node_ctx.node().right_child.is_some(), egui::Button::new("➡"))
                     .clicked()
                 {
                     node_ctx.set_right_visible();
@@ -84,6 +82,7 @@ pub(crate) fn draw_node<'a, 'c>(
                                 .as_ref()
                                 .expect("checked above")
                                 .clone(),
+                            show: false,
                         })
                         .inspect_err(|_| log::error!("Can't reach data fetching thread"));
                 }
@@ -121,14 +120,25 @@ pub(crate) fn draw_element(ui: &mut egui::Ui, transform: &mut TSTransform, node_
             }
         }
 
-        node_ctx.with_key_display_variant(|display_variant| {
-            binary_label_colored(
-                key_line,
-                node_ctx.key(),
-                display_variant,
-                element_to_color(&node_ctx.node().element),
-            )
-        });
+        if let Some(alias) = node_ctx
+            .child_subtree_ctx()
+            .map(|ctx| ctx.path().get_profiles_alias())
+            .flatten()
+        {
+            key_line.add(
+                Label::new(RichText::new(alias).color(element_to_color(&node_ctx.node().element)))
+                    .truncate(true),
+            );
+        } else {
+            node_ctx.with_key_display_variant(|display_variant| {
+                binary_label_colored(
+                    key_line,
+                    node_ctx.key(),
+                    display_variant,
+                    element_to_color(&node_ctx.node().element),
+                )
+            });
+        }
     });
 
     // Draw value

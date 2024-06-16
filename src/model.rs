@@ -368,9 +368,7 @@ impl<'c> Subtree<'c> {
         if !subtree_ui_state.expanded {
             Some(subtree_ui_state.input_point)
         } else {
-            self.nodes
-                .get(key)
-                .map(|node| node.ui_state.borrow().input_point)
+            self.nodes.get(key).map(|node| node.ui_state.borrow().input_point)
         }
     }
 
@@ -496,11 +494,7 @@ impl<'c> Subtree<'c> {
 
     fn iter_subtree_keys(&self) -> impl Iterator<Item = &Key> {
         self.nodes.iter().filter_map(|(key, node)| {
-            matches!(
-                node.element,
-                Element::Sumtree { .. } | Element::Subtree { .. }
-            )
-            .then(|| key)
+            matches!(node.element, Element::Sumtree { .. } | Element::Subtree { .. }).then(|| key)
         })
     }
 }
@@ -572,11 +566,7 @@ impl<'a, 'c> SubtreeCtx<'a, 'c> {
             .nodes
             .iter()
             .filter_map(|(key, node)| {
-                matches!(
-                    node.element,
-                    Element::Sumtree { .. } | Element::Subtree { .. }
-                )
-                .then_some(key)
+                matches!(node.element, Element::Sumtree { .. } | Element::Subtree { .. }).then_some(key)
             })
             .for_each(|key| self.set_child_visibility.set_visible(key, false));
     }
@@ -650,10 +640,7 @@ impl<'a, 'c> NodeCtx<'a, 'c> {
         &self.key
     }
 
-    pub(crate) fn with_key_display_variant<T>(
-        &self,
-        f: impl FnOnce(&mut DisplayVariant) -> T,
-    ) -> T {
+    pub(crate) fn with_key_display_variant<T>(&self, f: impl FnOnce(&mut DisplayVariant) -> T) -> T {
         if matches!(
             self.node.element,
             Element::Subtree { .. } | Element::Sumtree { .. }
@@ -902,9 +889,7 @@ mod tests {
         );
         assert_eq!(
             subtree.cluster_roots,
-            [b"right2".to_vec(), b"left2".to_vec()]
-                .into_iter()
-                .collect()
+            [b"right2".to_vec(), b"left2".to_vec()].into_iter().collect()
         );
 
         // Adding (fetching) it back shall return the subtree into original state

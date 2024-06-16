@@ -27,18 +27,15 @@ impl<'a, 'c> TryFrom<ElementCtx<'a, 'c>> for Element<'c> {
     ) -> Result<Self, Self::Error> {
         Ok(match element {
             grovedbg_types::Element::Subtree { root_key } => Element::Subtree { root_key },
-            grovedbg_types::Element::Sumtree { root_key, sum } => {
-                Element::Sumtree { root_key, sum }
-            }
+            grovedbg_types::Element::Sumtree { root_key, sum } => Element::Sumtree { root_key, sum },
             grovedbg_types::Element::Item { value } => Element::Item { value },
             grovedbg_types::Element::SumItem { value } => Element::SumItem { value },
             grovedbg_types::Element::AbsolutePathReference { path } => {
                 from_absolute_path_reference(path_ctx, path)?
             }
-            grovedbg_types::Element::UpstreamRootHeightReference {
-                n_keep,
-                path_append,
-            } => from_upstream_root_height_reference(path_ctx, path, n_keep, path_append)?,
+            grovedbg_types::Element::UpstreamRootHeightReference { n_keep, path_append } => {
+                from_upstream_root_height_reference(path_ctx, path, n_keep, path_append)?
+            }
             grovedbg_types::Element::UpstreamFromElementHeightReference {
                 n_remove,
                 path_append,

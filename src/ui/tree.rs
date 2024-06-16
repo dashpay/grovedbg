@@ -88,11 +88,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
             .set_transform_layer(layer_response.layer_id, self.transform.clone());
     }
 
-    fn draw_subtree_part(
-        &mut self,
-        (mut x_coord, mut y_coord): (i64, usize),
-        node_ctx: NodeCtx<'t, 't>,
-    ) {
+    fn draw_subtree_part(&mut self, (mut x_coord, mut y_coord): (i64, usize), node_ctx: NodeCtx<'t, 't>) {
         let subtree_ctx = node_ctx.subtree_ctx();
         let mut current_level_nodes: Vec<Option<(Option<Key>, KeySlice)>> = Vec::new();
         let mut next_level_nodes: Vec<Option<(Option<Key>, KeySlice)>> = Vec::new();
@@ -139,9 +135,11 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                             .borrow()
                             .show_left
                             .then_some(
-                                cur_node_ctx.node().left_child.as_deref().map(|child_key| {
-                                    (Some(cur_node_ctx.key().to_vec()), child_key)
-                                }),
+                                cur_node_ctx
+                                    .node()
+                                    .left_child
+                                    .as_deref()
+                                    .map(|child_key| (Some(cur_node_ctx.key().to_vec()), child_key)),
                             )
                             .flatten(),
                     );
@@ -153,9 +151,11 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                             .borrow()
                             .show_right
                             .then_some(
-                                cur_node_ctx.node().right_child.as_deref().map(|child_key| {
-                                    (Some(cur_node_ctx.key().to_vec()), child_key)
-                                }),
+                                cur_node_ctx
+                                    .node()
+                                    .right_child
+                                    .as_deref()
+                                    .map(|child_key| (Some(cur_node_ctx.key().to_vec()), child_key)),
                             )
                             .flatten(),
                     );
@@ -183,11 +183,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
         }
     }
 
-    fn draw_subtree_collapsed(
-        &mut self,
-        (coord_x, coord_y): (i64, usize),
-        subtree_ctx: SubtreeCtx<'t, 'c>,
-    ) {
+    fn draw_subtree_collapsed(&mut self, (coord_x, coord_y): (i64, usize), subtree_ctx: SubtreeCtx<'t, 'c>) {
         let subtree = subtree_ctx.subtree();
         let layer_response = egui::Area::new(subtree_ctx.egui_id())
             .fixed_pos((coord_x as f32 * CELL_X, coord_y as f32 * CELL_Y))
@@ -223,9 +219,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                                             key: key.clone(),
                                             limit: FetchLimit::Unbounded,
                                         })
-                                        .inspect_err(|_| {
-                                            log::error!("Can't reach data fetching thread")
-                                        });
+                                        .inspect_err(|_| log::error!("Can't reach data fetching thread"));
                                 }
                             }
 
@@ -251,10 +245,9 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                                         .blocking_send(Message::FetchNode {
                                             path: subtree_ctx.path().to_vec(),
                                             key: key.clone(),
+                                            show: false,
                                         })
-                                        .inspect_err(|_| {
-                                            log::error!("Can't reach data fetching thread")
-                                        });
+                                        .inspect_err(|_| log::error!("Can't reach data fetching thread"));
                                 }
                             }
 
@@ -264,9 +257,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                                     .blocking_send(Message::UnloadSubtree {
                                         path: subtree_ctx.path().to_vec(),
                                     })
-                                    .inspect_err(|_| {
-                                        log::error!("Can't reach data fetching thread")
-                                    });
+                                    .inspect_err(|_| log::error!("Can't reach data fetching thread"));
                                 subtree_ctx.subtree().first_page();
                             }
                         });
@@ -358,8 +349,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                 .iter()
                 .take(parent_subtree_ctx.path().level() + 1)
                 .sum();
-            let mut current_children_x =
-                x - parent_subtree_ctx.subtree().children_width() as i64 / 2;
+            let mut current_children_x = x - parent_subtree_ctx.subtree().children_width() as i64 / 2;
             let current_parent_children_queue: VecDeque<_> = parent_subtree_ctx
                 .iter_subtrees()
                 .filter(SubtreeCtx::is_visible)
@@ -373,9 +363,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
 
                 let output_point = child
                     .path()
-                    .for_last_segment(|key| {
-                        parent_subtree_ctx.subtree().get_node_output(key.bytes())
-                    })
+                    .for_last_segment(|key| parent_subtree_ctx.subtree().get_node_output(key.bytes()))
                     .flatten();
                 if let (Some(output_point), Some(input_point)) =
                     (output_point, child.subtree().get_subtree_input_point())
