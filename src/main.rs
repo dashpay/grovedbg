@@ -6,6 +6,7 @@ mod test_utils;
 mod ui;
 
 use std::{
+    collections::BTreeMap,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -13,6 +14,7 @@ use std::{
 use eframe::egui::{self, emath::TSTransform, Vec2, Visuals};
 use fetch::Message;
 use model::path_display::PathCtx;
+use profiles::{drive_profile, EnabledProfile};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 use crate::{model::Tree, ui::TreeDrawer};
@@ -60,6 +62,8 @@ struct App<'c> {
     tree: Arc<Mutex<Tree<'c>>>,
     path_ctx: &'c PathCtx,
     sender: Sender<Message>,
+    // TODO: shouldn't be hardcoded eventually
+    drive_profile: Option<EnabledProfile<'c>>,
 }
 
 impl<'c> App<'c> {
@@ -74,6 +78,7 @@ impl<'c> App<'c> {
             tree,
             path_ctx,
             sender,
+            drive_profile: Some(drive_profile().enable_profile(path_ctx)),
         }
     }
 }
@@ -128,15 +133,21 @@ impl<'c> eframe::App for App<'c> {
             }
 
             egui::Window::new("Log").default_pos((0., 100.)).show(ctx, |ui| {
-                // draws the logger ui.
                 egui_logger::logger_ui(ui);
             });
 
             egui::Window::new("Profiles")
-                .default_pos((0., 200.))
+                .default_pos((0., 500.))
                 .show(ctx, |ui| {
-                    // draws the logger ui.
-                    egui_logger::logger_ui(ui);
+                    let mut drive_profile_checked = self.drive_profile.is_some();
+                    ui.checkbox(&mut drive_profile_checked, "Drive profile");
+                    if !drive_profile_checked {
+                        if let Some(enabled_profile) = self.drive_profile.take() {
+                            enabled_profile.disable();
+                        }
+                    } else if self.drive_profile.is_none() {
+                        self.drive_profile = Some(drive_profile().enable_profile(self.path_ctx));
+                    }
                 });
 
             ctx.request_repaint_after(Duration::from_secs(5));
