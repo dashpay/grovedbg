@@ -23,11 +23,15 @@ where
 
 pub(crate) struct EnabledProfile<'c>(Vec<Path<'c>>);
 
-impl EnabledProfile<'_> {
+impl<'c> EnabledProfile<'c> {
     pub fn disable(self) {
         for path in self.0.into_iter() {
             path.clear_profile_alias();
         }
+    }
+
+    pub fn iter_aliases(&self) -> impl Iterator<Item = &Path<'c>> {
+        self.0.iter()
     }
 }
 

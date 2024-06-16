@@ -13,7 +13,10 @@ use std::{
 
 use eframe::egui::{self, emath::TSTransform, Vec2, Visuals};
 use fetch::Message;
-use model::path_display::PathCtx;
+use model::{
+    path_display::{Path, PathCtx},
+    Node,
+};
 use profiles::{drive_profile, EnabledProfile};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
@@ -147,6 +150,50 @@ impl<'c> eframe::App for App<'c> {
                         }
                     } else if self.drive_profile.is_none() {
                         self.drive_profile = Some(drive_profile().enable_profile(self.path_ctx));
+                    } else {
+                        if let Some(enabled_profile) = &self.drive_profile {
+                            ui.collapsing("Profile Subtrees", |profile_subtrees| {
+                                for profile_path in enabled_profile.iter_aliases() {
+                                    if let Some(alias) = profile_path.get_profiles_alias() {
+                                        profile_subtrees.horizontal(|line| {
+                                            if line.button("Fetch").clicked() {
+                                                if let Some((path, key)) = profile_path.parent_with_key() {
+                                                    let _ = self
+                                                        .sender
+                                                        .blocking_send(Message::FetchNode {
+                                                            path: path.to_vec(),
+                                                            key,
+                                                            show: true,
+                                                        })
+                                                        .inspect_err(|_| {
+                                                            log::error!("Can't reach data fetching thread")
+                                                        });
+                                                }
+                                            }
+                                            {
+                                                let lock = self.tree.lock().unwrap();
+                                                if let Some(subtree) = lock.get_subtree(profile_path) {
+                                                    if line.button("🔎").clicked() {
+                                                        subtree.subtree().set_visible(true);
+                                                        self.transform = TSTransform::from_translation(
+                                                            subtree
+                                                                .subtree()
+                                                                .get_subtree_input_point()
+                                                                .map(|point| {
+                                                                    point.to_vec2() + Vec2::new(-1500., -900.)
+                                                                })
+                                                                .unwrap_or_default(),
+                                                        )
+                                                        .inverse();
+                                                    }
+                                                }
+                                            }
+                                            line.label(alias);
+                                        });
+                                    }
+                                }
+                            });
+                        }
                     }
                 });
 

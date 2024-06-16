@@ -62,6 +62,7 @@ pub(crate) fn draw_node<'a, 'c>(
                                 .as_ref()
                                 .expect("checked above")
                                 .clone(),
+                            show: false,
                         })
                         .inspect_err(|_| log::error!("Can't reach data fetching thread"));
                 }
@@ -81,6 +82,7 @@ pub(crate) fn draw_node<'a, 'c>(
                                 .as_ref()
                                 .expect("checked above")
                                 .clone(),
+                            show: false,
                         })
                         .inspect_err(|_| log::error!("Can't reach data fetching thread"));
                 }

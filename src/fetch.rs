@@ -8,16 +8,13 @@ use reqwest::Client;
 use tokio::sync::mpsc::Receiver;
 
 use self::proto_conversion::{from_update, BadProtoElement};
-use crate::{
-    model::{path_display::PathCtx, Key, Node, Tree},
-    ui::common::bytes_as_hex,
-};
+use crate::model::{path_display::PathCtx, Key, Node, Tree};
 
 type Path = Vec<Vec<u8>>;
 
 pub(crate) enum Message {
     FetchRoot,
-    FetchNode { path: Path, key: Key },
+    FetchNode { path: Path, key: Key, show: bool },
     FetchBranch { path: Path, key: Key, limit: FetchLimit },
     UnloadSubtree { path: Path },
 }
@@ -71,7 +68,7 @@ async fn process_message<'c>(
                 from_update(path_ctx, root_node)?,
             );
         }
-        Message::FetchNode { path, key } => {
+        Message::FetchNode { path, key, show } => {
             log::info!("Fetching a node...");
             let Some(node_update) = client
                 .post(format!("{}/fetch_node", base_url()))
@@ -87,7 +84,19 @@ async fn process_message<'c>(
                 return Ok(());
             };
             let mut lock = tree.lock().unwrap();
-            lock.insert(path_ctx.add_path(path), key, from_update(path_ctx, node_update)?);
+            let parent_subtree_path = path_ctx.add_path(path);
+            lock.insert(
+                parent_subtree_path,
+                key.clone(),
+                from_update(path_ctx, node_update)?,
+            );
+            if show {
+                lock.get_subtree(&parent_subtree_path.child(key))
+                    .into_iter()
+                    .for_each(|ctx| {
+                        ctx.subtree().set_visible(true);
+                    });
+            }
         }
         Message::FetchBranch { path, key, limit } => {
             log::info!("Fetching subtree branch...");

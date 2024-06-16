@@ -245,6 +245,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                                         .blocking_send(Message::FetchNode {
                                             path: subtree_ctx.path().to_vec(),
                                             key: key.clone(),
+                                            show: false,
                                         })
                                         .inspect_err(|_| log::error!("Can't reach data fetching thread"));
                                 }
