@@ -144,6 +144,10 @@ pub(crate) fn path_label<'a>(ui: &mut egui::Ui, path: Path<'a>) -> egui::Respons
 
             let response = ui.label(text);
 
+            if response.clicked() {
+                path.select_for_query();
+            }
+
             response.on_hover_ui_at_pointer(|hover_ui| {
                 let mut text = String::from("[");
                 path.for_segments(|mut iter| {

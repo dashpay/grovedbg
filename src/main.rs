@@ -19,6 +19,7 @@ use model::{
 };
 use profiles::{drive_profile, EnabledProfile};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use ui::QueryBuilder;
 
 use crate::{model::Tree, ui::TreeDrawer};
 
@@ -67,6 +68,7 @@ struct App<'c> {
     sender: Sender<Message>,
     // TODO: shouldn't be hardcoded eventually
     drive_profile: Option<EnabledProfile<'c>>,
+    query_builder: QueryBuilder<'c>,
 }
 
 impl<'c> App<'c> {
@@ -82,6 +84,7 @@ impl<'c> App<'c> {
             path_ctx,
             sender,
             drive_profile: Some(drive_profile().enable_profile(path_ctx)),
+            query_builder: QueryBuilder::new(path_ctx),
         }
     }
 }
@@ -196,6 +199,11 @@ impl<'c> eframe::App for App<'c> {
                         }
                     }
                 });
+
+            egui::Window::new("Query builder")
+                .default_pos((0., 600.))
+                .default_open(false)
+                .show(ctx, |ui| self.query_builder.draw(ui));
 
             ctx.request_repaint_after(Duration::from_secs(5));
         });

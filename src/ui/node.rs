@@ -1,7 +1,5 @@
-use std::borrow::Borrow;
-
 use eframe::{
-    egui::{self, Label, Layout, Response, RichText, Vec2},
+    egui::{self, Label, Layout, RichText, Vec2},
     emath::TSTransform,
     epaint::{Color32, Stroke},
 };
@@ -10,7 +8,6 @@ use tokio::sync::mpsc::Sender;
 use super::{
     common::{binary_label, binary_label_colored, bytes_by_display_variant, path_label},
     tree::CELL_X,
-    DisplayVariant, TreeDrawer,
 };
 use crate::{
     fetch::Message,

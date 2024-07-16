@@ -1,4 +1,6 @@
 //! Conversion definitions from received proto object to model.
+use std::iter;
+
 use grovedbg_types::{Key, Path, PathSegment};
 
 use crate::model::{path_display::PathCtx, Element, Node};
@@ -49,6 +51,15 @@ impl<'a, 'c> TryFrom<ElementCtx<'a, 'c>> for Element<'c> {
             grovedbg_types::Element::SiblingReference { sibling_key } => {
                 from_sibling_reference(path_ctx, path.to_vec(), sibling_key)
             }
+            grovedbg_types::Element::UpstreamRootHeightWithParentPathAdditionReference {
+                n_keep,
+                path_append,
+            } => from_upstream_root_height_with_parent_path_addition_reference(
+                path_ctx,
+                path,
+                n_keep,
+                path_append,
+            )?,
         })
     }
 }
@@ -78,6 +89,29 @@ fn from_upstream_root_height_reference<'c>(
         .cloned()
         .take(n_keep as usize)
         .chain(path_append.into_iter())
+        .collect();
+    if let Some(key) = path.pop() {
+        Ok(Element::Reference {
+            path: path_ctx.add_path(path),
+            key,
+        })
+    } else {
+        Err(ReferenceWithoutKey)
+    }
+}
+
+fn from_upstream_root_height_with_parent_path_addition_reference<'c>(
+    path_ctx: &'c PathCtx,
+    path: &[PathSegment],
+    n_keep: u32,
+    path_append: Path,
+) -> Result<Element<'c>, ReferenceWithoutKey> {
+    let mut path_iter = path.iter().cloned();
+    let parent = path_iter.next_back().ok_or_else(|| ReferenceWithoutKey)?;
+    let mut path: Vec<_> = path_iter
+        .take(n_keep as usize)
+        .chain(path_append.into_iter())
+        .chain(iter::once(parent))
         .collect();
     if let Some(key) = path.pop() {
         Ok(Element::Reference {
