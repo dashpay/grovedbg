@@ -82,9 +82,9 @@ impl<'c> App<'c> {
             transform: TSTransform::from_translation(Vec2::new(1000., 500.)),
             tree,
             path_ctx,
+            query_builder: QueryBuilder::new(path_ctx, sender.clone()),
             sender,
             drive_profile: Some(drive_profile().enable_profile(path_ctx)),
-            query_builder: QueryBuilder::new(path_ctx),
         }
     }
 }

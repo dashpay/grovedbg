@@ -3,7 +3,7 @@ mod proto_conversion;
 use std::{collections::VecDeque, sync::Mutex};
 
 use futures::TryFutureExt;
-use grovedbg_types::{NodeFetchRequest, NodeUpdate, RootFetchRequest};
+use grovedbg_types::{NodeFetchRequest, NodeUpdate, PathQuery, RootFetchRequest};
 use reqwest::Client;
 use tokio::sync::mpsc::Receiver;
 
@@ -17,6 +17,7 @@ pub(crate) enum Message {
     FetchNode { path: Path, key: Key, show: bool },
     FetchBranch { path: Path, key: Key, limit: FetchLimit },
     UnloadSubtree { path: Path },
+    ExecutePathQuery { path_query: PathQuery },
 }
 
 pub(crate) enum FetchLimit {
@@ -146,6 +147,16 @@ async fn process_message<'c>(
         Message::UnloadSubtree { path } => {
             let mut lock = tree.lock().unwrap();
             lock.clear_subtree(path_ctx.add_path(path));
+        }
+        Message::ExecutePathQuery { path_query } => {
+            client
+                .post(format!("{}/execute_path_query", base_url()))
+                .json(&path_query)
+                .send()
+                .and_then(|response| response.json::<Option<NodeUpdate>>())
+                .await
+                .map_err(|e| log::error!("Error executing a path query: {}", e))
+                .ok();
         }
     }
     Ok(())

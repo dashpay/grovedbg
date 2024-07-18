@@ -1,62 +1,108 @@
 use eframe::egui::{
     self, Align, CollapsingHeader, Color32, Frame, Layout, Margin, RadioButton, RichText, TextEdit, Vec2,
 };
-use grovedbg_types::QueryItem;
+use grovedbg_types::{PathQuery, Query, QueryItem, SubqueryBranch};
 use integer_encoding::VarInt;
+use tokio::sync::mpsc::Sender;
 
 use super::{common::path_label, DisplayVariant};
-use crate::model::path_display::PathCtx;
+use crate::{fetch::Message, model::path_display::PathCtx};
 
 const MARGIN: f32 = 20.;
 
 pub(crate) struct QueryBuilder<'p> {
     path_ctx: &'p PathCtx,
-    limit: Option<u16>,
-    limit_input: String,
-    offset: Option<u16>,
-    offset_input: String,
+    sender: Sender<Message>,
+    limit_input: OptionalNumberInput,
+    offset_input: OptionalNumberInput,
     query: QueryInput,
 }
 
 impl<'p> QueryBuilder<'p> {
-    pub fn new(path_ctx: &'p PathCtx) -> Self {
+    pub fn new(path_ctx: &'p PathCtx, sender: Sender<Message>) -> Self {
         QueryBuilder {
             path_ctx,
-            limit: None,
-            offset: None,
-            limit_input: String::new(),
-            offset_input: String::new(),
+            limit_input: OptionalNumberInput::new("Limit".to_owned()),
+            offset_input: OptionalNumberInput::new("Offset".to_owned()),
             query: QueryInput::new(0),
+            sender,
         }
     }
 
     pub fn draw(&mut self, ui: &mut egui::Ui) {
         if let Some(path) = self.path_ctx.get_selected_for_query() {
             path_label(ui, path);
-            opt_number_input(ui, "Limit: ", &mut self.limit_input, &mut self.limit);
-            opt_number_input(ui, "Offset: ", &mut self.offset_input, &mut self.offset);
+            self.limit_input.draw(ui);
+            self.offset_input.draw(ui);
             self.query.draw(ui);
+
+            if ui.button("Execute").clicked() {
+                self.execute_query();
+            }
         } else {
             ui.label("No query path selected, click on a subtree header with path first");
         }
     }
+
+    fn execute_query(&self) {
+        if let Some(path) = self.path_ctx.get_selected_for_query() {
+            let path_query = PathQuery {
+                path: path.to_vec(),
+                query: grovedbg_types::SizedQuery {
+                    query: self.query.get_query(),
+                    limit: self.limit_input.number,
+                    offset: self.offset_input.number,
+                },
+            };
+
+            self.sender
+                .blocking_send(Message::ExecutePathQuery { path_query })
+                .inspect_err(|_| log::error!("Can't reach data fetching thread"))
+                .ok();
+        }
+    }
 }
 
-fn opt_number_input(ui: &mut egui::Ui, hint: &'static str, input: &mut String, value: &mut Option<u16>) {
-    ui.horizontal(|line| {
-        let label = line.label(hint);
-        if line
-            .text_edit_singleline(input)
-            .labelled_by(label.id)
-            .lost_focus()
-        {
-            if let Ok(input) = input.parse() {
-                *value = Some(input);
-            } else {
-                *value = None;
-            }
+struct OptionalNumberInput {
+    number: Option<u16>,
+    input: String,
+    label: String,
+    err: bool,
+}
+
+impl OptionalNumberInput {
+    fn new(label: String) -> Self {
+        Self {
+            number: None,
+            input: String::new(),
+            err: false,
+            label,
         }
-    });
+    }
+
+    fn draw(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|line| {
+            let label = line.label(RichText::new(&self.label).color(if self.err {
+                Color32::RED
+            } else {
+                Color32::PLACEHOLDER
+            }));
+
+            if line
+                .text_edit_singleline(&mut self.input)
+                .labelled_by(label.id)
+                .lost_focus()
+            {
+                if let Ok(x) = self.input.parse() {
+                    self.number = Some(x);
+                    self.err = false;
+                } else {
+                    self.err = !self.input.is_empty();
+                    self.number = None
+                }
+            }
+        });
+    }
 }
 
 struct BytesInput {
@@ -129,7 +175,7 @@ impl BytesInput {
 }
 
 struct QueryItemInput {
-    value: Option<QueryItem>,
+    value: QueryItem,
     input_type: QueryInputType,
     subquery_idx: usize,
     item_idx: usize,
@@ -151,7 +197,7 @@ enum QueryInputType {
 impl QueryItemInput {
     fn new(subquery_idx: usize, item_idx: usize) -> Self {
         Self {
-            value: None,
+            value: QueryItem::Key(Vec::new()),
             input_type: QueryInputType::Key(BytesInput::new("Key".to_owned())),
             subquery_idx,
             item_idx,
@@ -302,6 +348,10 @@ impl QueryItemInput {
             }
         }
     }
+
+    fn get_query_item(&self) -> QueryItem {
+        self.value.clone()
+    }
 }
 
 struct QueryInput {
@@ -330,6 +380,9 @@ impl QueryInput {
             if line.button("+").clicked() {
                 self.items
                     .push(QueryItemInput::new(self.subquery_idx, self.items.len()));
+            }
+            if line.button("-").clicked() {
+                self.items.pop();
             }
         });
         for item in self.items.iter_mut() {
@@ -368,6 +421,9 @@ impl QueryInput {
                             + self.conditional_subquery_branches.len(),
                     ));
             }
+            if line.button("-").clicked() {
+                self.conditional_subquery_branches.pop();
+            }
         });
 
         Frame::none()
@@ -380,6 +436,26 @@ impl QueryInput {
                     branch.draw(subquery_branches_frame);
                 }
             });
+    }
+
+    fn get_query(&self) -> Query {
+        Query {
+            items: self.items.iter().map(|item| item.get_query_item()).collect(),
+            default_subquery_branch: self
+                .default_subquery_branch
+                .as_ref()
+                .map(|subquery| subquery.get_subquery_branch())
+                .unwrap_or_else(|| SubqueryBranch {
+                    subquery_path: None,
+                    subquery: None,
+                }),
+            conditional_subquery_branches: self
+                .conditional_subquery_branches
+                .iter()
+                .map(|cond| cond.get_conditional_subquery_pair())
+                .collect(),
+            left_to_right: self.left_to_right,
+        }
     }
 }
 
@@ -402,6 +478,13 @@ impl SubqueryBranchInput {
             self.subquery.draw(layout);
         });
     }
+
+    fn get_subquery_branch(&self) -> SubqueryBranch {
+        SubqueryBranch {
+            subquery_path: Some(self.relative_path.get_path()),
+            subquery: Some(Box::new(self.subquery.get_query())),
+        }
+    }
 }
 
 struct ConditionalSubqueryBranchInput {
@@ -423,6 +506,13 @@ impl ConditionalSubqueryBranchInput {
         ui.label("Conditional subquery:");
         self.subquery_branch.draw(ui);
     }
+
+    fn get_conditional_subquery_pair(&self) -> (QueryItem, SubqueryBranch) {
+        (
+            self.query_item.get_query_item(),
+            self.subquery_branch.get_subquery_branch(),
+        )
+    }
 }
 
 struct PathInput {
@@ -440,9 +530,16 @@ impl PathInput {
             if line.button("+").clicked() {
                 self.path.push(BytesInput::new(self.path.len().to_string()));
             }
+            if line.button("-").clicked() {
+                self.path.pop();
+            }
         });
         for segment in self.path.iter_mut() {
             segment.draw(ui);
         }
+    }
+
+    fn get_path(&self) -> Vec<Vec<u8>> {
+        self.path.iter().map(|segment| segment.bytes.clone()).collect()
     }
 }
