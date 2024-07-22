@@ -6,20 +6,16 @@ mod test_utils;
 mod ui;
 
 use std::{
-    collections::BTreeMap,
     sync::{Arc, Mutex},
     time::Duration,
 };
 
 use eframe::egui::{self, emath::TSTransform, Vec2, Visuals};
 use fetch::Message;
-use model::{
-    path_display::{Path, PathCtx},
-    Node,
-};
+use model::path_display::PathCtx;
 use profiles::{drive_profile, EnabledProfile};
-use tokio::sync::mpsc::{channel, Receiver, Sender};
-use ui::QueryBuilder;
+use tokio::sync::mpsc::Sender;
+use ui::{ProofViewer, QueryBuilder};
 
 use crate::{model::Tree, ui::TreeDrawer};
 
@@ -29,6 +25,7 @@ fn main() {}
 #[cfg(target_arch = "wasm32")]
 fn main() {
     use profiles::drive_profile;
+    use tokio::sync::mpsc::channel;
 
     egui_logger::init().unwrap();
     eframe::WebLogger::init(log::LevelFilter::Debug).ok();
@@ -41,10 +38,12 @@ fn main() {
     drive_profile().enable_profile(path_ctx);
 
     let tree: Arc<Mutex<Tree>> = Arc::new(Mutex::new(Tree::new(path_ctx)));
+    let proof_viewer: Arc<Mutex<Option<ProofViewer>>> = Default::default();
 
     let t = Arc::clone(&tree);
+    let p = Arc::clone(&proof_viewer);
     wasm_bindgen_futures::spawn_local(async move {
-        fetch::process_messages(receiver, t.as_ref(), path_ctx).await;
+        fetch::process_messages(receiver, t.as_ref(), p.as_ref(), path_ctx).await;
     });
 
     sender.blocking_send(Message::FetchRoot).unwrap();
@@ -54,7 +53,7 @@ fn main() {
             .start(
                 "the_canvas_id", // hardcode it
                 web_options,
-                Box::new(move |cc| Box::new(App::new(cc, tree, path_ctx, sender))),
+                Box::new(move |cc| Box::new(App::new(cc, tree, proof_viewer, path_ctx, sender))),
             )
             .await
             .expect("failed to start eframe");
@@ -69,12 +68,14 @@ struct App<'c> {
     // TODO: shouldn't be hardcoded eventually
     drive_profile: Option<EnabledProfile<'c>>,
     query_builder: QueryBuilder<'c>,
+    proof_viewer: Arc<Mutex<Option<ProofViewer>>>,
 }
 
 impl<'c> App<'c> {
     fn new(
         _cc: &eframe::CreationContext<'_>,
         tree: Arc<Mutex<Tree<'c>>>,
+        proof_viewer: Arc<Mutex<Option<ProofViewer>>>,
         path_ctx: &'c PathCtx,
         sender: Sender<Message>,
     ) -> Self {
@@ -85,6 +86,7 @@ impl<'c> App<'c> {
             query_builder: QueryBuilder::new(path_ctx, sender.clone()),
             sender,
             drive_profile: Some(drive_profile().enable_profile(path_ctx)),
+            proof_viewer,
         }
     }
 }
