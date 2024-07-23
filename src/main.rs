@@ -207,6 +207,20 @@ impl<'c> eframe::App for App<'c> {
                 .default_open(false)
                 .show(ctx, |ui| self.query_builder.draw(ui));
 
+            egui::Window::new("Received proof")
+                .default_pos((0., 800.))
+                .default_open(false)
+                .show(ctx, |ui| {
+                    self.proof_viewer
+                        .lock()
+                        .unwrap()
+                        .as_mut()
+                        .map(|viewer| viewer.draw(ui))
+                        .unwrap_or_else(|| {
+                            ui.label("No proof fetched yet");
+                        })
+                });
+
             ctx.request_repaint_after(Duration::from_secs(5));
         });
     }

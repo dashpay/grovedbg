@@ -175,7 +175,6 @@ impl BytesInput {
 }
 
 struct QueryItemInput {
-    value: QueryItem,
     input_type: QueryInputType,
     subquery_idx: usize,
     item_idx: usize,
@@ -197,7 +196,6 @@ enum QueryInputType {
 impl QueryItemInput {
     fn new(subquery_idx: usize, item_idx: usize) -> Self {
         Self {
-            value: QueryItem::Key(Vec::new()),
             input_type: QueryInputType::Key(BytesInput::new("Key".to_owned())),
             subquery_idx,
             item_idx,
@@ -350,7 +348,30 @@ impl QueryItemInput {
     }
 
     fn get_query_item(&self) -> QueryItem {
-        self.value.clone()
+        match &self.input_type {
+            QueryInputType::Key(input) => QueryItem::Key(input.bytes.clone()),
+            QueryInputType::Range { start, end } => QueryItem::Range {
+                start: start.bytes.clone(),
+                end: end.bytes.clone(),
+            },
+            QueryInputType::RangeInclusive { start, end } => QueryItem::RangeInclusive {
+                start: start.bytes.clone(),
+                end: end.bytes.clone(),
+            },
+            QueryInputType::RangeFull => QueryItem::RangeFull,
+            QueryInputType::RangeFrom(input) => QueryItem::RangeFrom(input.bytes.clone()),
+            QueryInputType::RangeTo(input) => QueryItem::RangeTo(input.bytes.clone()),
+            QueryInputType::RangeToInclusive(input) => QueryItem::RangeToInclusive(input.bytes.clone()),
+            QueryInputType::RangeAfter(input) => QueryItem::RangeAfter(input.bytes.clone()),
+            QueryInputType::RangeAfterTo { after, to } => QueryItem::RangeAfterTo {
+                after: after.bytes.clone(),
+                to: to.bytes.clone(),
+            },
+            QueryInputType::RangeAfterToInclusive { after, to } => QueryItem::RangeAfterToInclusive {
+                after: after.bytes.clone(),
+                to: to.bytes.clone(),
+            },
+        }
     }
 }
 
