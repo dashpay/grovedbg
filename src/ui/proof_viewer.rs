@@ -82,49 +82,55 @@ impl MerkProofViewer {
     }
 }
 
-struct MerkProofOpViewer {
-    op: grovedbg_types::MerkProofOp,
-    node_viewer: Option<MerkProofNodeViewer>,
+enum MerkProofOpViewer {
+    Push(MerkProofNodeViewer),
+    PushInverted(MerkProofNodeViewer),
+    Parent,
+    Child,
+    ParentInverted,
+    ChildInverted,
 }
 
 impl MerkProofOpViewer {
     fn new(op: grovedbg_types::MerkProofOp) -> Self {
-        Self {
-            node_viewer: match &op {
-                grovedbg_types::MerkProofOp::Push(node) => Some(MerkProofNodeViewer::new(node.clone())),
-                grovedbg_types::MerkProofOp::PushInverted(node) => {
-                    Some(MerkProofNodeViewer::new(node.clone()))
-                }
-                _ => None,
-            },
-            op,
+        match op {
+            grovedbg_types::MerkProofOp::Push(node) => {
+                MerkProofOpViewer::Push(MerkProofNodeViewer::new(node))
+            }
+            grovedbg_types::MerkProofOp::PushInverted(node) => {
+                MerkProofOpViewer::PushInverted(MerkProofNodeViewer::new(node))
+            }
+            grovedbg_types::MerkProofOp::Parent => MerkProofOpViewer::Parent,
+            grovedbg_types::MerkProofOp::Child => MerkProofOpViewer::Child,
+            grovedbg_types::MerkProofOp::ParentInverted => MerkProofOpViewer::ParentInverted,
+            grovedbg_types::MerkProofOp::ChildInverted => MerkProofOpViewer::ChildInverted,
         }
     }
 
     fn draw(&mut self, ui: &mut egui::Ui) {
-        match &mut self.op {
-            grovedbg_types::MerkProofOp::Push(node) => {
+        match self {
+            MerkProofOpViewer::Push(node) => {
                 ui.horizontal(|line| {
                     line.label("Push:");
-                    self.node_viewer.as_mut().unwrap().draw(line);
+                    node.draw(line);
                 });
             }
-            grovedbg_types::MerkProofOp::PushInverted(node) => {
+            MerkProofOpViewer::PushInverted(node) => {
                 ui.horizontal(|line| {
                     line.label("Push inverted:");
-                    self.node_viewer.as_mut().unwrap().draw(line);
+                    node.draw(line);
                 });
             }
-            grovedbg_types::MerkProofOp::Parent => {
+            MerkProofOpViewer::Parent => {
                 ui.label("Parent");
             }
-            grovedbg_types::MerkProofOp::Child => {
+            MerkProofOpViewer::Child => {
                 ui.label("Child");
             }
-            grovedbg_types::MerkProofOp::ParentInverted => {
+            MerkProofOpViewer::ParentInverted => {
                 ui.label("ParentInverted");
             }
-            grovedbg_types::MerkProofOp::ChildInverted => {
+            MerkProofOpViewer::ChildInverted => {
                 ui.label("ChildInverted");
             }
         };
@@ -135,10 +141,15 @@ enum MerkProofNodeViewer {
     Hash(BytesView),
     KVHash(BytesView),
     KVDigest(BytesView, BytesView),
-    KV(BytesView, BytesView),
-    KVValueHash(BytesView, BytesView, BytesView),
-    KVValueHashFeatureType(BytesView, BytesView, BytesView, grovedbg_types::TreeFeatureType),
-    KVRefValueHash(BytesView, BytesView, BytesView),
+    KV(BytesView, ElementViewer),
+    KVValueHash(BytesView, ElementViewer, BytesView),
+    KVValueHashFeatureType(
+        BytesView,
+        ElementViewer,
+        BytesView,
+        grovedbg_types::TreeFeatureType,
+    ),
+    KVRefValueHash(BytesView, ElementViewer, BytesView),
 }
 
 impl MerkProofNodeViewer {
@@ -153,26 +164,28 @@ impl MerkProofNodeViewer {
             grovedbg_types::MerkProofNode::KVDigest(key, hash) => {
                 MerkProofNodeViewer::KVDigest(BytesView::new(key), BytesView::new(hash.to_vec()))
             }
-            grovedbg_types::MerkProofNode::KV(key, value) => {
-                MerkProofNodeViewer::KV(BytesView::new(key), BytesView::new(value))
+            grovedbg_types::MerkProofNode::KV(key, element) => {
+                MerkProofNodeViewer::KV(BytesView::new(key), ElementViewer::new(element))
             }
-            grovedbg_types::MerkProofNode::KVValueHash(key, value, hash) => MerkProofNodeViewer::KVValueHash(
-                BytesView::new(key),
-                BytesView::new(value),
-                BytesView::new(hash.to_vec()),
-            ),
-            grovedbg_types::MerkProofNode::KVValueHashFeatureType(key, value, hash, ft) => {
+            grovedbg_types::MerkProofNode::KVValueHash(key, element, hash) => {
+                MerkProofNodeViewer::KVValueHash(
+                    BytesView::new(key),
+                    ElementViewer::new(element),
+                    BytesView::new(hash.to_vec()),
+                )
+            }
+            grovedbg_types::MerkProofNode::KVValueHashFeatureType(key, element, hash, ft) => {
                 MerkProofNodeViewer::KVValueHashFeatureType(
                     BytesView::new(key),
-                    BytesView::new(value),
+                    ElementViewer::new(element),
                     BytesView::new(hash.to_vec()),
                     ft,
                 )
             }
-            grovedbg_types::MerkProofNode::KVRefValueHash(key, value, hash) => {
+            grovedbg_types::MerkProofNode::KVRefValueHash(key, element, hash) => {
                 MerkProofNodeViewer::KVRefValueHash(
                     BytesView::new(key),
-                    BytesView::new(value),
+                    ElementViewer::new(element),
                     BytesView::new(hash.to_vec()),
                 )
             }
@@ -235,8 +248,8 @@ struct BytesView {
 impl BytesView {
     fn new(bytes: Vec<u8>) -> Self {
         Self {
+            display_variant: DisplayVariant::guess(&bytes),
             bytes,
-            display_variant: DisplayVariant::Hex,
         }
     }
 
@@ -265,5 +278,191 @@ impl ProveOptionsView {
                     .to_string(),
             );
         });
+    }
+}
+
+enum ElementViewer {
+    Subtree {
+        root_key: Option<BytesView>,
+    },
+    Sumtree {
+        root_key: Option<BytesView>,
+        sum: i64,
+    },
+    Item {
+        value: BytesView,
+    },
+    SumItem {
+        value: i64,
+    },
+    AbsolutePathReference {
+        path: Vec<BytesView>,
+    },
+    UpstreamRootHeightReference {
+        n_keep: u32,
+        path_append: Vec<BytesView>,
+    },
+    UpstreamRootHeightWithParentPathAdditionReference {
+        n_keep: u32,
+        path_append: Vec<BytesView>,
+    },
+    UpstreamFromElementHeightReference {
+        n_remove: u32,
+        path_append: Vec<BytesView>,
+    },
+    CousinReference {
+        swap_parent: BytesView,
+    },
+    RemovedCousinReference {
+        swap_parent: Vec<BytesView>,
+    },
+    SiblingReference {
+        sibling_key: BytesView,
+    },
+}
+
+impl ElementViewer {
+    fn new(element: grovedbg_types::Element) -> Self {
+        match element {
+            grovedbg_types::Element::Subtree { root_key } => ElementViewer::Subtree {
+                root_key: root_key.map(|k| BytesView::new(k)),
+            },
+            grovedbg_types::Element::Sumtree { root_key, sum } => ElementViewer::Sumtree {
+                root_key: root_key.map(|k| BytesView::new(k)),
+                sum,
+            },
+            grovedbg_types::Element::Item { value } => ElementViewer::Item {
+                value: BytesView::new(value),
+            },
+            grovedbg_types::Element::SumItem { value } => ElementViewer::SumItem { value },
+            grovedbg_types::Element::AbsolutePathReference { path } => ElementViewer::AbsolutePathReference {
+                path: path.into_iter().map(|s| BytesView::new(s)).collect(),
+            },
+            grovedbg_types::Element::UpstreamRootHeightReference { n_keep, path_append } => {
+                ElementViewer::UpstreamRootHeightReference {
+                    n_keep,
+                    path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
+                }
+            }
+            grovedbg_types::Element::UpstreamRootHeightWithParentPathAdditionReference {
+                n_keep,
+                path_append,
+            } => ElementViewer::UpstreamRootHeightWithParentPathAdditionReference {
+                n_keep,
+                path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
+            },
+            grovedbg_types::Element::UpstreamFromElementHeightReference {
+                n_remove,
+                path_append,
+            } => ElementViewer::UpstreamFromElementHeightReference {
+                n_remove,
+                path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
+            },
+            grovedbg_types::Element::CousinReference { swap_parent } => ElementViewer::CousinReference {
+                swap_parent: BytesView::new(swap_parent),
+            },
+            grovedbg_types::Element::RemovedCousinReference { swap_parent } => {
+                ElementViewer::RemovedCousinReference {
+                    swap_parent: swap_parent.into_iter().map(|s| BytesView::new(s)).collect(),
+                }
+            }
+            grovedbg_types::Element::SiblingReference { sibling_key } => ElementViewer::SiblingReference {
+                sibling_key: BytesView::new(sibling_key),
+            },
+        }
+    }
+
+    fn draw(&mut self, ui: &mut egui::Ui) {
+        match self {
+            ElementViewer::Subtree { root_key: Some(key) } => {
+                ui.label("Subtree");
+                ui.horizontal(|line| {
+                    line.label("Root key:");
+                    key.draw(line);
+                });
+            }
+            ElementViewer::Subtree { root_key: None } => {
+                ui.label("Empty subtree");
+            }
+            ElementViewer::Sumtree {
+                root_key: Some(key),
+                sum,
+            } => {
+                ui.label(format!("Sum tree: {sum}"));
+                ui.horizontal(|line| {
+                    line.label("Root key:");
+                    key.draw(line);
+                });
+            }
+            ElementViewer::Sumtree { root_key: None, sum } => {
+                ui.label(format!("Empty sum tree: {sum}"));
+            }
+            ElementViewer::Item { value } => {
+                ui.label("Item");
+                value.draw(ui);
+            }
+            ElementViewer::SumItem { value } => {
+                ui.label(format!("Sum item: {value}"));
+            }
+            ElementViewer::AbsolutePathReference { path } => {
+                ui.label("Absolute path reference");
+                for (i, segment) in path.iter_mut().enumerate() {
+                    ui.horizontal(|line| {
+                        line.label(i.to_string());
+                        segment.draw(line);
+                    });
+                }
+            }
+            ElementViewer::UpstreamRootHeightReference { n_keep, path_append } => {
+                ui.label("Upstream root height reference");
+                ui.label(format!("N keep: {n_keep}"));
+                for (i, segment) in path_append.iter_mut().enumerate() {
+                    ui.horizontal(|line| {
+                        line.label(i.to_string());
+                        segment.draw(line);
+                    });
+                }
+            }
+            ElementViewer::UpstreamRootHeightWithParentPathAdditionReference { n_keep, path_append } => {
+                ui.label("Upstream root height with parent path addition reference");
+                ui.label(format!("N keep: {n_keep}"));
+                for (i, segment) in path_append.iter_mut().enumerate() {
+                    ui.horizontal(|line| {
+                        line.label(i.to_string());
+                        segment.draw(line);
+                    });
+                }
+            }
+            ElementViewer::UpstreamFromElementHeightReference {
+                n_remove,
+                path_append,
+            } => {
+                ui.label("Upstream from element height reference ");
+                ui.label(format!("N remove: {n_remove}"));
+                for (i, segment) in path_append.iter_mut().enumerate() {
+                    ui.horizontal(|line| {
+                        line.label(i.to_string());
+                        segment.draw(line);
+                    });
+                }
+            }
+            ElementViewer::CousinReference { swap_parent } => {
+                ui.label("Cousin reference");
+                swap_parent.draw(ui);
+            }
+            ElementViewer::RemovedCousinReference { swap_parent } => {
+                ui.label("Removed cousin reference");
+                for (i, segment) in swap_parent.iter_mut().enumerate() {
+                    ui.horizontal(|line| {
+                        line.label(i.to_string());
+                        segment.draw(line);
+                    });
+                }
+            }
+            ElementViewer::SiblingReference { sibling_key } => {
+                ui.label("Sibling reference");
+                sibling_key.draw(ui);
+            }
+        }
     }
 }
