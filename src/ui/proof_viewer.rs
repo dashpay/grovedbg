@@ -193,50 +193,87 @@ impl MerkProofNodeViewer {
     }
 
     fn draw(&mut self, ui: &mut egui::Ui) {
-        match self {
-            MerkProofNodeViewer::Hash(hash) => ui.vertical(|line| {
-                line.label("Hash:");
-                hash.draw(line);
-            }),
-            MerkProofNodeViewer::KVHash(hash) => ui.vertical(|line| {
-                line.label("KVHash:");
-                hash.draw(line);
-            }),
-            MerkProofNodeViewer::KVDigest(key, hash) => ui.vertical(|line| {
-                line.label("KVDigest:");
-                key.draw(line);
-                hash.draw(line);
-            }),
-            MerkProofNodeViewer::KV(key, value) => ui.vertical(|line| {
-                line.label("KV:");
-                key.draw(line);
-                value.draw(line);
-            }),
-            MerkProofNodeViewer::KVValueHash(key, value, hash) => ui.vertical(|line| {
-                line.label("KVValueHash:");
-                key.draw(line);
-                value.draw(line);
-                hash.draw(line);
-            }),
-            MerkProofNodeViewer::KVValueHashFeatureType(key, value, hash, ft) => ui.vertical(|line| {
-                line.label("KVValueHashFeatureType:");
-                key.draw(line);
-                value.draw(line);
-                hash.draw(line);
-                match ft {
-                    grovedbg_types::TreeFeatureType::BasicMerkNode => line.label("Basic merk node"),
-                    grovedbg_types::TreeFeatureType::SummedMerkNode(x) => {
-                        line.label(format!("Summed merk node: {x}"))
-                    }
-                };
-            }),
-            MerkProofNodeViewer::KVRefValueHash(key, value, hash) => ui.vertical(|line| {
-                line.label("KVRefValueHash:");
-                key.draw(line);
-                value.draw(line);
-                hash.draw(line);
-            }),
-        };
+        ui.vertical(|ui| {
+            match self {
+                MerkProofNodeViewer::Hash(hash) => {
+                    ui.horizontal(|line| {
+                        line.label("Hash:");
+                        hash.draw(line);
+                    });
+                }
+                MerkProofNodeViewer::KVHash(hash) => {
+                    ui.horizontal(|line| {
+                        line.label("KVHash:");
+                        hash.draw(line);
+                    });
+                }
+                MerkProofNodeViewer::KVDigest(key, hash) => {
+                    ui.label("KVDigest:");
+                    ui.horizontal(|line| {
+                        line.label("Key:");
+                        key.draw(line);
+                    });
+                    ui.horizontal(|line| {
+                        line.label("Value hash:");
+                        hash.draw(line);
+                    });
+                }
+                MerkProofNodeViewer::KV(key, value) => {
+                    ui.label("KV:");
+                    ui.horizontal(|line| {
+                        line.label("Key:");
+                        key.draw(line);
+                    });
+                    ui.label("Value:");
+                    value.draw(ui);
+                }
+                MerkProofNodeViewer::KVValueHash(key, value, hash) => {
+                    ui.label("KVValueHash:");
+                    ui.horizontal(|line| {
+                        line.label("Key:");
+                        key.draw(line);
+                    });
+                    ui.label("Value:");
+                    value.draw(ui);
+                    ui.horizontal(|line| {
+                        line.label("Value hash:");
+                        hash.draw(line);
+                    });
+                }
+                MerkProofNodeViewer::KVValueHashFeatureType(key, value, hash, ft) => {
+                    ui.label("KVValueHashFeatureType:");
+                    ui.horizontal(|line| {
+                        line.label("Key:");
+                        key.draw(line);
+                    });
+                    ui.label("Value:");
+                    value.draw(ui);
+                    ui.horizontal(|line| {
+                        line.label("Value hash:");
+                        hash.draw(line);
+                    });
+                    match ft {
+                        grovedbg_types::TreeFeatureType::BasicMerkNode => ui.label("Basic merk node"),
+                        grovedbg_types::TreeFeatureType::SummedMerkNode(x) => {
+                            ui.label(format!("Summed merk node: {x}"))
+                        }
+                    };
+                }
+                MerkProofNodeViewer::KVRefValueHash(key, value, hash) => {
+                    ui.label("KVRefValueHash:");
+                    ui.horizontal(|line| {
+                        line.label("Key:");
+                        key.draw(line);
+                    });
+                    ui.label("Ref value:");
+                    value.draw(ui);
+                    ui.horizontal(|line| {
+                        line.label("Value hash:");
+                        hash.draw(line);
+                    });
+                }
+            };
+        });
     }
 }
 
@@ -284,127 +321,219 @@ impl ProveOptionsView {
 enum ElementViewer {
     Subtree {
         root_key: Option<BytesView>,
+        element_flags: Option<BytesView>,
     },
     Sumtree {
         root_key: Option<BytesView>,
         sum: i64,
+        element_flags: Option<BytesView>,
     },
     Item {
         value: BytesView,
+        element_flags: Option<BytesView>,
     },
     SumItem {
         value: i64,
+        element_flags: Option<BytesView>,
     },
     AbsolutePathReference {
         path: Vec<BytesView>,
+        element_flags: Option<BytesView>,
     },
     UpstreamRootHeightReference {
         n_keep: u32,
         path_append: Vec<BytesView>,
+        element_flags: Option<BytesView>,
     },
     UpstreamRootHeightWithParentPathAdditionReference {
         n_keep: u32,
         path_append: Vec<BytesView>,
+        element_flags: Option<BytesView>,
     },
     UpstreamFromElementHeightReference {
         n_remove: u32,
         path_append: Vec<BytesView>,
+        element_flags: Option<BytesView>,
     },
     CousinReference {
         swap_parent: BytesView,
+        element_flags: Option<BytesView>,
     },
     RemovedCousinReference {
         swap_parent: Vec<BytesView>,
+        element_flags: Option<BytesView>,
     },
     SiblingReference {
         sibling_key: BytesView,
+        element_flags: Option<BytesView>,
     },
 }
 
 impl ElementViewer {
     fn new(element: grovedbg_types::Element) -> Self {
         match element {
-            grovedbg_types::Element::Subtree { root_key } => ElementViewer::Subtree {
+            grovedbg_types::Element::Subtree {
+                root_key,
+                element_flags,
+            } => ElementViewer::Subtree {
                 root_key: root_key.map(|k| BytesView::new(k)),
+                element_flags: element_flags.map(|f| BytesView::new(f)),
             },
-            grovedbg_types::Element::Sumtree { root_key, sum } => ElementViewer::Sumtree {
+            grovedbg_types::Element::Sumtree {
+                root_key,
+                sum,
+                element_flags,
+            } => ElementViewer::Sumtree {
                 root_key: root_key.map(|k| BytesView::new(k)),
                 sum,
+                element_flags: element_flags.map(|f| BytesView::new(f)),
             },
-            grovedbg_types::Element::Item { value } => ElementViewer::Item {
+            grovedbg_types::Element::Item { value, element_flags } => ElementViewer::Item {
                 value: BytesView::new(value),
+                element_flags: element_flags.map(|f| BytesView::new(f)),
             },
-            grovedbg_types::Element::SumItem { value } => ElementViewer::SumItem { value },
-            grovedbg_types::Element::AbsolutePathReference { path } => ElementViewer::AbsolutePathReference {
-                path: path.into_iter().map(|s| BytesView::new(s)).collect(),
+            grovedbg_types::Element::SumItem { value, element_flags } => ElementViewer::SumItem {
+                value,
+
+                element_flags: element_flags.map(|f| BytesView::new(f)),
             },
-            grovedbg_types::Element::UpstreamRootHeightReference { n_keep, path_append } => {
-                ElementViewer::UpstreamRootHeightReference {
-                    n_keep,
-                    path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
+            grovedbg_types::Element::AbsolutePathReference { path, element_flags } => {
+                ElementViewer::AbsolutePathReference {
+                    path: path.into_iter().map(|s| BytesView::new(s)).collect(),
+                    element_flags: element_flags.map(|f| BytesView::new(f)),
                 }
             }
+            grovedbg_types::Element::UpstreamRootHeightReference {
+                n_keep,
+                path_append,
+                element_flags,
+            } => ElementViewer::UpstreamRootHeightReference {
+                n_keep,
+                path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
+                element_flags: element_flags.map(|f| BytesView::new(f)),
+            },
             grovedbg_types::Element::UpstreamRootHeightWithParentPathAdditionReference {
                 n_keep,
                 path_append,
+                element_flags,
             } => ElementViewer::UpstreamRootHeightWithParentPathAdditionReference {
                 n_keep,
                 path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
+                element_flags: element_flags.map(|f| BytesView::new(f)),
             },
             grovedbg_types::Element::UpstreamFromElementHeightReference {
                 n_remove,
                 path_append,
+                element_flags,
             } => ElementViewer::UpstreamFromElementHeightReference {
                 n_remove,
                 path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
+                element_flags: element_flags.map(|f| BytesView::new(f)),
             },
-            grovedbg_types::Element::CousinReference { swap_parent } => ElementViewer::CousinReference {
+            grovedbg_types::Element::CousinReference {
+                swap_parent,
+                element_flags,
+            } => ElementViewer::CousinReference {
                 swap_parent: BytesView::new(swap_parent),
+                element_flags: element_flags.map(|f| BytesView::new(f)),
             },
-            grovedbg_types::Element::RemovedCousinReference { swap_parent } => {
-                ElementViewer::RemovedCousinReference {
-                    swap_parent: swap_parent.into_iter().map(|s| BytesView::new(s)).collect(),
-                }
-            }
-            grovedbg_types::Element::SiblingReference { sibling_key } => ElementViewer::SiblingReference {
+            grovedbg_types::Element::RemovedCousinReference {
+                swap_parent,
+                element_flags,
+            } => ElementViewer::RemovedCousinReference {
+                swap_parent: swap_parent.into_iter().map(|s| BytesView::new(s)).collect(),
+                element_flags: element_flags.map(|f| BytesView::new(f)),
+            },
+            grovedbg_types::Element::SiblingReference {
+                sibling_key,
+                element_flags,
+            } => ElementViewer::SiblingReference {
                 sibling_key: BytesView::new(sibling_key),
+                element_flags: element_flags.map(|f| BytesView::new(f)),
             },
         }
     }
 
     fn draw(&mut self, ui: &mut egui::Ui) {
         match self {
-            ElementViewer::Subtree { root_key: Some(key) } => {
+            ElementViewer::Subtree {
+                root_key: Some(key),
+                element_flags,
+            } => {
                 ui.label("Subtree");
                 ui.horizontal(|line| {
                     line.label("Root key:");
                     key.draw(line);
                 });
+                if let Some(flags) = element_flags {
+                    ui.horizontal(|line| {
+                        line.label("Flags:");
+                        flags.draw(line);
+                    });
+                }
             }
-            ElementViewer::Subtree { root_key: None } => {
+            ElementViewer::Subtree {
+                root_key: None,
+                element_flags,
+            } => {
                 ui.label("Empty subtree");
+                if let Some(flags) = element_flags {
+                    ui.horizontal(|line| {
+                        line.label("Flags:");
+                        flags.draw(line);
+                    });
+                }
             }
             ElementViewer::Sumtree {
                 root_key: Some(key),
                 sum,
+                element_flags,
             } => {
                 ui.label(format!("Sum tree: {sum}"));
                 ui.horizontal(|line| {
                     line.label("Root key:");
                     key.draw(line);
                 });
+                if let Some(flags) = element_flags {
+                    ui.horizontal(|line| {
+                        line.label("Flags:");
+                        flags.draw(line);
+                    });
+                }
             }
-            ElementViewer::Sumtree { root_key: None, sum } => {
+            ElementViewer::Sumtree {
+                root_key: None,
+                sum,
+                element_flags,
+            } => {
                 ui.label(format!("Empty sum tree: {sum}"));
+                if let Some(flags) = element_flags {
+                    ui.horizontal(|line| {
+                        line.label("Flags:");
+                        flags.draw(line);
+                    });
+                }
             }
-            ElementViewer::Item { value } => {
+            ElementViewer::Item { value, element_flags } => {
                 ui.label("Item");
                 value.draw(ui);
+                if let Some(flags) = element_flags {
+                    ui.horizontal(|line| {
+                        line.label("Flags:");
+                        flags.draw(line);
+                    });
+                }
             }
-            ElementViewer::SumItem { value } => {
+            ElementViewer::SumItem { value, element_flags } => {
                 ui.label(format!("Sum item: {value}"));
+                if let Some(flags) = element_flags {
+                    ui.horizontal(|line| {
+                        line.label("Flags:");
+                        flags.draw(line);
+                    });
+                }
             }
-            ElementViewer::AbsolutePathReference { path } => {
+            ElementViewer::AbsolutePathReference { path, element_flags } => {
                 ui.label("Absolute path reference");
                 for (i, segment) in path.iter_mut().enumerate() {
                     ui.horizontal(|line| {
@@ -412,8 +541,18 @@ impl ElementViewer {
                         segment.draw(line);
                     });
                 }
+                if let Some(flags) = element_flags {
+                    ui.horizontal(|line| {
+                        line.label("Flags:");
+                        flags.draw(line);
+                    });
+                }
             }
-            ElementViewer::UpstreamRootHeightReference { n_keep, path_append } => {
+            ElementViewer::UpstreamRootHeightReference {
+                n_keep,
+                path_append,
+                element_flags,
+            } => {
                 ui.label("Upstream root height reference");
                 ui.label(format!("N keep: {n_keep}"));
                 for (i, segment) in path_append.iter_mut().enumerate() {
@@ -422,8 +561,18 @@ impl ElementViewer {
                         segment.draw(line);
                     });
                 }
+                if let Some(flags) = element_flags {
+                    ui.horizontal(|line| {
+                        line.label("Flags:");
+                        flags.draw(line);
+                    });
+                }
             }
-            ElementViewer::UpstreamRootHeightWithParentPathAdditionReference { n_keep, path_append } => {
+            ElementViewer::UpstreamRootHeightWithParentPathAdditionReference {
+                n_keep,
+                path_append,
+                element_flags,
+            } => {
                 ui.label("Upstream root height with parent path addition reference");
                 ui.label(format!("N keep: {n_keep}"));
                 for (i, segment) in path_append.iter_mut().enumerate() {
@@ -432,10 +581,17 @@ impl ElementViewer {
                         segment.draw(line);
                     });
                 }
+                if let Some(flags) = element_flags {
+                    ui.horizontal(|line| {
+                        line.label("Flags:");
+                        flags.draw(line);
+                    });
+                }
             }
             ElementViewer::UpstreamFromElementHeightReference {
                 n_remove,
                 path_append,
+                element_flags,
             } => {
                 ui.label("Upstream from element height reference ");
                 ui.label(format!("N remove: {n_remove}"));
@@ -445,12 +601,30 @@ impl ElementViewer {
                         segment.draw(line);
                     });
                 }
+                if let Some(flags) = element_flags {
+                    ui.horizontal(|line| {
+                        line.label("Flags:");
+                        flags.draw(line);
+                    });
+                }
             }
-            ElementViewer::CousinReference { swap_parent } => {
+            ElementViewer::CousinReference {
+                swap_parent,
+                element_flags,
+            } => {
                 ui.label("Cousin reference");
                 swap_parent.draw(ui);
+                if let Some(flags) = element_flags {
+                    ui.horizontal(|line| {
+                        line.label("Flags:");
+                        flags.draw(line);
+                    });
+                }
             }
-            ElementViewer::RemovedCousinReference { swap_parent } => {
+            ElementViewer::RemovedCousinReference {
+                swap_parent,
+                element_flags,
+            } => {
                 ui.label("Removed cousin reference");
                 for (i, segment) in swap_parent.iter_mut().enumerate() {
                     ui.horizontal(|line| {
@@ -458,10 +632,25 @@ impl ElementViewer {
                         segment.draw(line);
                     });
                 }
+                if let Some(flags) = element_flags {
+                    ui.horizontal(|line| {
+                        line.label("Flags:");
+                        flags.draw(line);
+                    });
+                }
             }
-            ElementViewer::SiblingReference { sibling_key } => {
+            ElementViewer::SiblingReference {
+                sibling_key,
+                element_flags,
+            } => {
                 ui.label("Sibling reference");
                 sibling_key.draw(ui);
+                if let Some(flags) = element_flags {
+                    ui.horizontal(|line| {
+                        line.label("Flags:");
+                        flags.draw(line);
+                    });
+                }
             }
         }
     }

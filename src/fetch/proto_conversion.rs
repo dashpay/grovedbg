@@ -28,37 +28,69 @@ impl<'a, 'c> TryFrom<ElementCtx<'a, 'c>> for Element<'c> {
         }: ElementCtx<'a, 'c>,
     ) -> Result<Self, Self::Error> {
         Ok(match element {
-            grovedbg_types::Element::Subtree { root_key } => Element::Subtree { root_key },
-            grovedbg_types::Element::Sumtree { root_key, sum } => Element::Sumtree { root_key, sum },
-            grovedbg_types::Element::Item { value } => Element::Item { value },
-            grovedbg_types::Element::SumItem { value } => Element::SumItem { value },
-            grovedbg_types::Element::AbsolutePathReference { path } => {
-                from_absolute_path_reference(path_ctx, path)?
+            grovedbg_types::Element::Subtree {
+                root_key,
+                element_flags,
+            } => Element::Subtree {
+                root_key,
+                element_flags,
+            },
+            grovedbg_types::Element::Sumtree {
+                root_key,
+                sum,
+                element_flags,
+            } => Element::Sumtree {
+                root_key,
+                sum,
+                element_flags,
+            },
+            grovedbg_types::Element::Item { value, element_flags } => Element::Item { value, element_flags },
+            grovedbg_types::Element::SumItem { value, element_flags } => {
+                Element::SumItem { value, element_flags }
             }
-            grovedbg_types::Element::UpstreamRootHeightReference { n_keep, path_append } => {
-                from_upstream_root_height_reference(path_ctx, path, n_keep, path_append)?
+            grovedbg_types::Element::AbsolutePathReference { path, element_flags } => {
+                from_absolute_path_reference(path_ctx, path, element_flags)?
             }
+            grovedbg_types::Element::UpstreamRootHeightReference {
+                n_keep,
+                path_append,
+                element_flags,
+            } => from_upstream_root_height_reference(path_ctx, path, n_keep, path_append, element_flags)?,
             grovedbg_types::Element::UpstreamFromElementHeightReference {
                 n_remove,
                 path_append,
-            } => from_upstream_element_height_reference(path_ctx, path, n_remove, path_append)?,
-            grovedbg_types::Element::CousinReference { swap_parent } => {
-                from_cousin_reference(path_ctx, path.to_vec(), key.to_vec(), swap_parent)?
+                element_flags,
+            } => {
+                from_upstream_element_height_reference(path_ctx, path, n_remove, path_append, element_flags)?
             }
-            grovedbg_types::Element::RemovedCousinReference { swap_parent } => {
-                from_removed_cousin_reference(path_ctx, path.to_vec(), key.to_vec(), swap_parent)?
-            }
-            grovedbg_types::Element::SiblingReference { sibling_key } => {
-                from_sibling_reference(path_ctx, path.to_vec(), sibling_key)
-            }
+            grovedbg_types::Element::CousinReference {
+                swap_parent,
+                element_flags,
+            } => from_cousin_reference(path_ctx, path.to_vec(), key.to_vec(), swap_parent, element_flags)?,
+            grovedbg_types::Element::RemovedCousinReference {
+                swap_parent,
+                element_flags,
+            } => from_removed_cousin_reference(
+                path_ctx,
+                path.to_vec(),
+                key.to_vec(),
+                swap_parent,
+                element_flags,
+            )?,
+            grovedbg_types::Element::SiblingReference {
+                sibling_key,
+                element_flags,
+            } => from_sibling_reference(path_ctx, path.to_vec(), sibling_key, element_flags),
             grovedbg_types::Element::UpstreamRootHeightWithParentPathAdditionReference {
                 n_keep,
                 path_append,
+                element_flags,
             } => from_upstream_root_height_with_parent_path_addition_reference(
                 path_ctx,
                 path,
                 n_keep,
                 path_append,
+                element_flags,
             )?,
         })
     }
@@ -67,11 +99,13 @@ impl<'a, 'c> TryFrom<ElementCtx<'a, 'c>> for Element<'c> {
 fn from_absolute_path_reference<'c>(
     path_ctx: &'c PathCtx,
     mut path: grovedbg_types::Path,
+    element_flags: Option<Vec<u8>>,
 ) -> Result<Element<'c>, ReferenceWithoutKey> {
     if let Some(key) = path.pop() {
         Ok(Element::Reference {
             path: path_ctx.add_path(path),
             key,
+            element_flags,
         })
     } else {
         Err(ReferenceWithoutKey)
@@ -83,6 +117,7 @@ fn from_upstream_root_height_reference<'c>(
     path: &[PathSegment],
     n_keep: u32,
     path_append: Path,
+    element_flags: Option<Vec<u8>>,
 ) -> Result<Element<'c>, ReferenceWithoutKey> {
     let mut path: Vec<_> = path
         .iter()
@@ -94,6 +129,7 @@ fn from_upstream_root_height_reference<'c>(
         Ok(Element::Reference {
             path: path_ctx.add_path(path),
             key,
+            element_flags,
         })
     } else {
         Err(ReferenceWithoutKey)
@@ -105,6 +141,7 @@ fn from_upstream_root_height_with_parent_path_addition_reference<'c>(
     path: &[PathSegment],
     n_keep: u32,
     path_append: Path,
+    element_flags: Option<Vec<u8>>,
 ) -> Result<Element<'c>, ReferenceWithoutKey> {
     let mut path_iter = path.iter().cloned();
     let parent = path_iter.next_back().ok_or_else(|| ReferenceWithoutKey)?;
@@ -117,6 +154,7 @@ fn from_upstream_root_height_with_parent_path_addition_reference<'c>(
         Ok(Element::Reference {
             path: path_ctx.add_path(path),
             key,
+            element_flags,
         })
     } else {
         Err(ReferenceWithoutKey)
@@ -128,6 +166,7 @@ fn from_upstream_element_height_reference<'c>(
     path: &[PathSegment],
     n_remove: u32,
     path_append: Path,
+    element_flags: Option<Vec<u8>>,
 ) -> Result<Element<'c>, ReferenceWithoutKey> {
     let mut path_iter = path.iter();
     path_iter.nth_back(n_remove as usize);
@@ -136,6 +175,7 @@ fn from_upstream_element_height_reference<'c>(
         Ok(Element::Reference {
             path: path_ctx.add_path(path),
             key,
+            element_flags,
         })
     } else {
         Err(ReferenceWithoutKey)
@@ -147,12 +187,14 @@ fn from_cousin_reference<'c>(
     mut path: Path,
     key: Key,
     swap_parent: Key,
+    element_flags: Option<Vec<u8>>,
 ) -> Result<Element<'c>, ReferenceWithoutKey> {
     if let Some(parent) = path.last_mut() {
         *parent = swap_parent;
         Ok(Element::Reference {
             path: path_ctx.add_path(path),
             key,
+            element_flags,
         })
     } else {
         Err(ReferenceWithoutKey)
@@ -164,22 +206,30 @@ fn from_removed_cousin_reference<'c>(
     mut path: Path,
     key: Key,
     swap_parent: Vec<PathSegment>,
+    element_flags: Option<Vec<u8>>,
 ) -> Result<Element<'c>, ReferenceWithoutKey> {
     if let Some(_) = path.pop() {
         path.extend(swap_parent);
         Ok(Element::Reference {
             path: path_ctx.add_path(path),
             key,
+            element_flags,
         })
     } else {
         Err(ReferenceWithoutKey)
     }
 }
 
-fn from_sibling_reference<'c>(path_ctx: &'c PathCtx, path: Path, sibling_key: Key) -> Element<'c> {
+fn from_sibling_reference<'c>(
+    path_ctx: &'c PathCtx,
+    path: Path,
+    sibling_key: Key,
+    element_flags: Option<Vec<u8>>,
+) -> Element<'c> {
     Element::Reference {
         path: path_ctx.add_path(path),
         key: sibling_key,
+        element_flags,
     }
 }
 

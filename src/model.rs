@@ -135,7 +135,7 @@ impl<'c> Tree<'c> {
         {
             let mut state = node.ui_state.borrow_mut();
             state.key_display_variant = DisplayVariant::guess(&key);
-            if let Element::Item { value } = &node.element {
+            if let Element::Item { value, .. } = &node.element {
                 state.item_display_variant = DisplayVariant::guess(&value);
             }
         }
@@ -145,7 +145,7 @@ impl<'c> Tree<'c> {
 
         // If a new node inserted represents another subtree, it shall also be added;
         // Root node info is updated as well
-        if let Element::Sumtree { root_key, .. } | Element::Subtree { root_key } = &node.element {
+        if let Element::Sumtree { root_key, .. } | Element::Subtree { root_key, .. } = &node.element {
             let child_path = path.child(key.clone());
 
             let child_subtree = self.subtrees.entry(child_path).or_default();
@@ -688,6 +688,7 @@ impl<'a, 'c> NodeCtx<'a, 'c> {
 pub(crate) struct NodeUiState {
     pub(crate) key_display_variant: DisplayVariant,
     pub(crate) item_display_variant: DisplayVariant,
+    pub(crate) flags_display_variant: DisplayVariant,
     pub(crate) input_point: Pos2,
     pub(crate) output_point: Pos2,
     pub(crate) left_sibling_point: Pos2,
@@ -715,35 +716,52 @@ impl<'c> Node<'c> {
 
     pub(crate) fn new_item(value: Vec<u8>) -> Self {
         Node {
-            element: Element::Item { value },
+            element: Element::Item {
+                value,
+                element_flags: None,
+            },
             ..Default::default()
         }
     }
 
     pub(crate) fn new_sum_item(value: i64) -> Self {
         Node {
-            element: Element::SumItem { value },
+            element: Element::SumItem {
+                value,
+                element_flags: None,
+            },
             ..Default::default()
         }
     }
 
     pub(crate) fn new_reference(path: Path<'c>, key: Key) -> Self {
         Node {
-            element: Element::Reference { path, key },
+            element: Element::Reference {
+                path,
+                key,
+                element_flags: None,
+            },
             ..Default::default()
         }
     }
 
     pub(crate) fn new_sumtree(root_key: Option<Key>, sum: i64) -> Self {
         Node {
-            element: Element::Sumtree { root_key, sum },
+            element: Element::Sumtree {
+                root_key,
+                sum,
+                element_flags: None,
+            },
             ..Default::default()
         }
     }
 
     pub(crate) fn new_subtree(root_key: Option<Key>) -> Self {
         Node {
-            element: Element::Subtree { root_key },
+            element: Element::Subtree {
+                root_key,
+                element_flags: None,
+            },
             ..Default::default()
         }
     }
@@ -770,17 +788,34 @@ impl<'c> Node<'c> {
 #[derive(Debug, Clone, Default, PartialEq, strum::AsRefStr)]
 pub(crate) enum Element<'c> {
     /// Scalar value, arbitrary bytes
-    Item { value: Vec<u8> },
+    Item {
+        value: Vec<u8>,
+        element_flags: Option<Vec<u8>>,
+    },
     /// Subtree item that will be summed in a sumtree that contains it
-    SumItem { value: i64 },
+    SumItem {
+        value: i64,
+        element_flags: Option<Vec<u8>>,
+    },
     /// Reference to another (or the same) subtree's node
-    Reference { path: Path<'c>, key: Key },
+    Reference {
+        path: Path<'c>,
+        key: Key,
+        element_flags: Option<Vec<u8>>,
+    },
     /// A link to a deeper level subtree which accumulates a sum of its sum
     /// items, `None` indicates an empty subtree
-    Sumtree { root_key: Option<Key>, sum: i64 },
+    Sumtree {
+        root_key: Option<Key>,
+        sum: i64,
+        element_flags: Option<Vec<u8>>,
+    },
     /// A link to a deeper level subtree that starts with root_key; `None`
     /// indicates an empty subtree.
-    Subtree { root_key: Option<Key> },
+    Subtree {
+        root_key: Option<Key>,
+        element_flags: Option<Vec<u8>>,
+    },
     /// A placeholder of a not yet added node for a sub/sumtree in case we're
     /// aware of sub/sumtree existence (like by doing insertion using a path
     /// that mentions the subtree alongs its way)
@@ -792,7 +827,7 @@ pub(crate) enum Element<'c> {
 mod tests {
     use super::*;
 
-    fn sample_tree(path_ctx: &PathCtx) -> Subtree {
+    fn sample_tree() -> Subtree<'static> {
         // root
         // ├── right1
         // │   ├── right2
@@ -836,8 +871,7 @@ mod tests {
 
     #[test]
     fn simple_sequential_insertion_subtree() {
-        let path_ctx = PathCtx::new();
-        let subtree = sample_tree(&path_ctx);
+        let subtree = sample_tree();
 
         assert!(subtree.waitlist.is_empty());
         assert!(subtree.cluster_roots.is_empty());
@@ -845,8 +879,7 @@ mod tests {
 
     #[test]
     fn subtree_node_leaf_removal() {
-        let path_ctx = PathCtx::new();
-        let mut subtree = sample_tree(&path_ctx);
+        let mut subtree = sample_tree();
 
         // "Unloading" a node from subtree, meaning it will be missed
         subtree.remove(b"left4");
@@ -861,8 +894,7 @@ mod tests {
 
     #[test]
     fn subtree_node_leaf_complete_removal() {
-        let path_ctx = PathCtx::new();
-        let mut subtree = sample_tree(&path_ctx);
+        let mut subtree = sample_tree();
 
         subtree.remove(b"left4");
         let mut old_parent = subtree.nodes.get(b"left2".as_ref()).unwrap().clone();
@@ -876,8 +908,7 @@ mod tests {
 
     #[test]
     fn subtree_mid_node_delete_creates_clusters() {
-        let path_ctx = PathCtx::new();
-        let mut subtree = sample_tree(&path_ctx);
+        let mut subtree = sample_tree();
 
         // Deleting a node in a middle of a subtree shall create clusters
         subtree.remove(b"right1");
@@ -900,8 +931,7 @@ mod tests {
                 .with_right_child(b"right2".to_vec()),
         );
 
-        let path_ctx2 = PathCtx::new();
-        assert_eq!(subtree, sample_tree(&path_ctx2));
+        assert_eq!(subtree, sample_tree());
     }
 
     #[test]
