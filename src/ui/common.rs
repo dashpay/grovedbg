@@ -39,11 +39,33 @@ pub(crate) fn bytes_as_hex(bytes: &[u8]) -> String {
     }
 }
 
-pub(crate) fn bytes_as_int(bytes: &[u8]) -> String {
-    if let Ok(arr) = bytes.try_into() {
-        i64::from_be_bytes(arr).to_string()
-    } else {
-        String::from("[E]: must be 8 bytes")
+pub(crate) fn bytes_as_signed_int(bytes: &[u8]) -> String {
+    match bytes.len() {
+        2 => TryInto::<[u8; 2]>::try_into(bytes)
+            .map(|arr| format!("i16: {}", i16::from_be_bytes(arr)))
+            .expect("len is 2"),
+        4 => TryInto::<[u8; 4]>::try_into(bytes)
+            .map(|arr| format!("i32: {}", i32::from_be_bytes(arr)))
+            .expect("len is 4"),
+        8 => TryInto::<[u8; 8]>::try_into(bytes)
+            .map(|arr| format!("i64: {}", i64::from_be_bytes(arr)))
+            .expect("len is 8"),
+        _ => String::from("[E]: must be 2/4/8 bytes"),
+    }
+}
+
+pub(crate) fn bytes_as_unsigned_int(bytes: &[u8]) -> String {
+    match bytes.len() {
+        2 => TryInto::<[u8; 2]>::try_into(bytes)
+            .map(|arr| format!("u16: {}", u16::from_be_bytes(arr)))
+            .expect("len is 2"),
+        4 => TryInto::<[u8; 4]>::try_into(bytes)
+            .map(|arr| format!("u32: {}", u32::from_be_bytes(arr)))
+            .expect("len is 4"),
+        8 => TryInto::<[u8; 8]>::try_into(bytes)
+            .map(|arr| format!("u64: {}", u64::from_be_bytes(arr)))
+            .expect("len is 8"),
+        _ => String::from("[E]: must be 2/4/8 bytes"),
     }
 }
 
@@ -56,10 +78,11 @@ fn bytes_as_varint(bytes: &[u8]) -> String {
 pub(crate) fn bytes_by_display_variant(bytes: &[u8], display_variant: &DisplayVariant) -> String {
     match display_variant {
         DisplayVariant::U8 => bytes_as_slice(bytes),
-        DisplayVariant::String => String::from_utf8_lossy(bytes).to_string(),
-        DisplayVariant::Hex => bytes_as_hex(bytes),
-        DisplayVariant::Int => bytes_as_int(bytes),
-        DisplayVariant::VarInt => bytes_as_varint(bytes),
+        DisplayVariant::String => format!("str: {}", String::from_utf8_lossy(bytes).to_string()),
+        DisplayVariant::Hex => format!("hex: {}", bytes_as_hex(bytes)),
+        DisplayVariant::SignedInt => bytes_as_signed_int(bytes),
+        DisplayVariant::UnsignedInt => bytes_as_unsigned_int(bytes),
+        DisplayVariant::VarInt => format!("varint: {}", bytes_as_varint(bytes)),
     }
 }
 
@@ -68,7 +91,8 @@ pub(crate) fn bytes_by_display_variant_explicit(bytes: &[u8], display_variant: &
         DisplayVariant::U8 => format!("{bytes:?}"),
         DisplayVariant::String => String::from_utf8_lossy(bytes).to_string(),
         DisplayVariant::Hex => hex::encode(bytes),
-        DisplayVariant::Int => bytes_as_int(bytes),
+        DisplayVariant::SignedInt => bytes_as_signed_int(bytes),
+        DisplayVariant::UnsignedInt => bytes_as_unsigned_int(bytes),
         DisplayVariant::VarInt => bytes_as_varint(bytes),
     }
 }
@@ -104,7 +128,8 @@ fn display_variant_dropdown<'a>(
         menu.radio_value(display_variant, DisplayVariant::U8, "u8 array");
         menu.radio_value(display_variant, DisplayVariant::String, "UTF-8 String");
         menu.radio_value(display_variant, DisplayVariant::Hex, "Hex String");
-        menu.radio_value(display_variant, DisplayVariant::Int, "i64");
+        menu.radio_value(display_variant, DisplayVariant::SignedInt, "Signed Int");
+        menu.radio_value(display_variant, DisplayVariant::UnsignedInt, "Unsigned Int");
         menu.radio_value(display_variant, DisplayVariant::VarInt, "VarInt");
     });
     response
@@ -124,7 +149,8 @@ pub(crate) enum DisplayVariant {
     U8,
     String,
     Hex,
-    Int,
+    SignedInt,
+    UnsignedInt,
     VarInt,
 }
 
@@ -132,7 +158,7 @@ impl DisplayVariant {
     pub fn guess(bytes: &[u8]) -> Self {
         match bytes.len() {
             1 => DisplayVariant::U8,
-            8 => DisplayVariant::Int,
+            2 | 4 | 8 => DisplayVariant::SignedInt,
             32 => DisplayVariant::Hex,
             _ => DisplayVariant::String,
         }

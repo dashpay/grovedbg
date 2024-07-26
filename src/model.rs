@@ -318,6 +318,11 @@ impl<'c> Subtree<'c> {
 
     pub(crate) fn set_collapsed(&self) {
         self.ui_state.borrow_mut().expanded = false;
+        for (_, node) in self.nodes.iter() {
+            let mut state = node.ui_state.borrow_mut();
+            state.show_left = false;
+            state.show_right = false;
+        }
     }
 
     pub(crate) fn set_input_point(&self, input_point: Pos2) {

@@ -1,5 +1,3 @@
-use std::borrow::{Borrow, BorrowMut};
-
 use eframe::{
     egui::{self, Label, Layout, RichText, Vec2},
     emath::TSTransform,
