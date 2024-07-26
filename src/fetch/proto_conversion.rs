@@ -255,6 +255,9 @@ pub(crate) fn from_update<'c>(
         .try_into()?,
         left_child: value.left_child,
         right_child: value.right_child,
-        ..Default::default()
+        feature_type: Some(value.feature_type),
+        value_hash: Some(value.value_hash),
+        kv_digest_hash: Some(value.kv_digest_hash),
+        ui_state: Default::default(),
     })
 }

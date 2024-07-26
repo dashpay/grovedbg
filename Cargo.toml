@@ -9,7 +9,7 @@ edition = "2021"
 eframe = "0.27.2"
 egui_logger = "0.4.4"
 futures = "0.3.30"
-grovedbg-types = { path = "../grovedb/grovedbg-types" }
+grovedbg-types = { git = "https://github.com/dashpay/grovedb", rev = "96dd04e8269e718d24c83917fe70edebd126f2e6"}
 hex = "0.4.3"
 integer-encoding = "4.0.0"
 log = "0.4.22"

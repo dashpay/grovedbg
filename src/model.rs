@@ -8,6 +8,7 @@ use std::{
 };
 
 use eframe::{egui, epaint::Pos2};
+use grovedbg_types::{CryptoHash, TreeFeatureType};
 
 use self::{
     alignment::{expanded_subtree_levels, leaves_level_count},
@@ -138,6 +139,13 @@ impl<'c> Tree<'c> {
             if let Element::Item { value, .. } = &node.element {
                 state.item_display_variant = DisplayVariant::guess(&value);
             }
+
+            if let Some(bytes) = node.value_hash {
+                state.value_hash_display_variant = DisplayVariant::guess(&bytes);
+            }
+            if let Some(bytes) = node.kv_digest_hash {
+                state.kv_digest_hash_display_variant = DisplayVariant::guess(&bytes);
+            }
         }
 
         // Make sure all subtrees exist and according nodes are there as well
@@ -184,7 +192,7 @@ impl<'c> Tree<'c> {
         let mut current = path.parent_with_key();
         while let Some((parent, parent_key)) = current {
             let subtree = self.subtrees.entry(parent).or_default();
-            subtree.insert_not_exists(parent_key, Node::new_subtree_pacehodler());
+            subtree.insert_not_exists(parent_key, Node::new_subtree_placeholder());
             current = parent.parent_with_key();
         }
     }
@@ -654,10 +662,6 @@ impl<'a, 'c> NodeCtx<'a, 'c> {
         }
     }
 
-    // pub(crate) fn split(&self) -> (&'a Node<'a>, PathTwo<'a>, KeySlice) {
-    //     (self.node, self.path, &self.key)
-    // }
-
     pub(crate) fn node(&self) -> &'a Node<'c> {
         self.node
     }
@@ -683,18 +687,23 @@ impl<'a, 'c> NodeCtx<'a, 'c> {
     }
 }
 
+// TODO: approach used in query builder and proof viewer seems to be more
+// consistent and useful
 #[derive(Debug, Clone, Default)]
 #[cfg_attr(test, derive(PartialEq))]
 pub(crate) struct NodeUiState {
     pub(crate) key_display_variant: DisplayVariant,
     pub(crate) item_display_variant: DisplayVariant,
     pub(crate) flags_display_variant: DisplayVariant,
+    pub(crate) value_hash_display_variant: DisplayVariant,
+    pub(crate) kv_digest_hash_display_variant: DisplayVariant,
     pub(crate) input_point: Pos2,
     pub(crate) output_point: Pos2,
     pub(crate) left_sibling_point: Pos2,
     pub(crate) right_sibling_point: Pos2,
     pub(crate) show_left: bool,
     pub(crate) show_right: bool,
+    pub(crate) show_hashes: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -703,18 +712,15 @@ pub(crate) struct Node<'c> {
     pub(crate) element: Element<'c>,
     pub(crate) left_child: Option<Key>,
     pub(crate) right_child: Option<Key>,
+    pub(crate) feature_type: Option<TreeFeatureType>,
+    pub(crate) value_hash: Option<CryptoHash>,
+    pub(crate) kv_digest_hash: Option<CryptoHash>,
     pub(crate) ui_state: RefCell<NodeUiState>,
 }
 
 impl<'c> Node<'c> {
-    pub(crate) fn new_element(element: Element<'c>) -> Self {
-        Node {
-            element,
-            ..Default::default()
-        }
-    }
-
-    pub(crate) fn new_item(value: Vec<u8>) -> Self {
+    #[cfg(test)]
+    fn new_item(value: Vec<u8>) -> Self {
         Node {
             element: Element::Item {
                 value,
@@ -724,28 +730,8 @@ impl<'c> Node<'c> {
         }
     }
 
-    pub(crate) fn new_sum_item(value: i64) -> Self {
-        Node {
-            element: Element::SumItem {
-                value,
-                element_flags: None,
-            },
-            ..Default::default()
-        }
-    }
-
-    pub(crate) fn new_reference(path: Path<'c>, key: Key) -> Self {
-        Node {
-            element: Element::Reference {
-                path,
-                key,
-                element_flags: None,
-            },
-            ..Default::default()
-        }
-    }
-
-    pub(crate) fn new_sumtree(root_key: Option<Key>, sum: i64) -> Self {
+    #[cfg(test)]
+    fn new_sumtree(root_key: Option<Key>, sum: i64) -> Self {
         Node {
             element: Element::Sumtree {
                 root_key,
@@ -756,7 +742,8 @@ impl<'c> Node<'c> {
         }
     }
 
-    pub(crate) fn new_subtree(root_key: Option<Key>) -> Self {
+    #[cfg(test)]
+    fn new_subtree(root_key: Option<Key>) -> Self {
         Node {
             element: Element::Subtree {
                 root_key,
@@ -766,19 +753,21 @@ impl<'c> Node<'c> {
         }
     }
 
-    pub(crate) fn new_subtree_pacehodler() -> Self {
+    fn new_subtree_placeholder() -> Self {
         Node {
             element: Element::SubtreePlaceholder,
             ..Default::default()
         }
     }
 
-    pub(crate) fn with_left_child(mut self, key: Key) -> Self {
+    #[cfg(test)]
+    fn with_left_child(mut self, key: Key) -> Self {
         self.left_child = Some(key);
         self
     }
 
-    pub(crate) fn with_right_child(mut self, key: Key) -> Self {
+    #[cfg(test)]
+    fn with_right_child(mut self, key: Key) -> Self {
         self.right_child = Some(key);
         self
     }

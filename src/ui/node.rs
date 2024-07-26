@@ -1,3 +1,5 @@
+use std::borrow::{Borrow, BorrowMut};
+
 use eframe::{
     egui::{self, Label, Layout, RichText, Vec2},
     emath::TSTransform,
@@ -91,6 +93,10 @@ pub(crate) fn draw_node<'a, 'c>(
 pub(crate) fn draw_element(ui: &mut egui::Ui, transform: &mut TSTransform, node_ctx: &NodeCtx) {
     // Draw key
     ui.horizontal(|key_line| {
+        if key_line.button("#").clicked() {
+            let mut state = node_ctx.node().ui_state.borrow_mut();
+            state.show_hashes = !state.show_hashes;
+        }
         if matches!(
             node_ctx.node().element,
             Element::Subtree { .. } | Element::Sumtree { .. }
@@ -142,10 +148,8 @@ pub(crate) fn draw_element(ui: &mut egui::Ui, transform: &mut TSTransform, node_
     let node = node_ctx.node();
 
     let layout = Layout::top_down(egui::Align::Min);
-    ui.allocate_ui_with_layout(
-        Vec2::new(CELL_X, 20.),
-        layout,
-        |value_ui: &mut egui::Ui| match &node.element {
+    ui.allocate_ui_with_layout(Vec2::new(CELL_X, 20.), layout, |value_ui: &mut egui::Ui| {
+        match &node.element {
             Element::Item { value, element_flags } => {
                 let mut state = node.ui_state.borrow_mut();
                 binary_label(value_ui, value, &mut state.item_display_variant);
@@ -206,8 +210,23 @@ pub(crate) fn draw_element(ui: &mut egui::Ui, transform: &mut TSTransform, node_
             Element::SubtreePlaceholder => {
                 value_ui.label("Subtree");
             }
-        },
-    );
+        };
+        let mut state = node_ctx.node().ui_state.borrow_mut();
+        if state.show_hashes {
+            if let Some(kv_digest_hash) = node_ctx.node().kv_digest_hash {
+                value_ui.horizontal(|line| {
+                    line.label("KV digest hash:");
+                    binary_label(line, &kv_digest_hash, &mut state.kv_digest_hash_display_variant);
+                });
+            }
+            if let Some(value_hash) = node_ctx.node().value_hash {
+                value_ui.horizontal(|line| {
+                    line.label("Value hash:");
+                    binary_label(line, &value_hash, &mut state.value_hash_display_variant);
+                });
+            }
+        }
+    });
 }
 
 pub(crate) fn element_to_color(element: &Element) -> Color32 {

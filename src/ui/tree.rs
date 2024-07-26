@@ -10,7 +10,7 @@ use eframe::{
 use tokio::sync::mpsc::Sender;
 
 use super::{
-    common::path_label,
+    common::{binary_label, path_label},
     node::{draw_element, draw_node},
 };
 use crate::{
