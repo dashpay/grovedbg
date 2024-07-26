@@ -138,7 +138,6 @@ impl BytesInput {
                 menu.radio_value(&mut self.display_variant, DisplayVariant::U8, "u8 array");
                 menu.radio_value(&mut self.display_variant, DisplayVariant::String, "UTF-8 String");
                 menu.radio_value(&mut self.display_variant, DisplayVariant::Hex, "Hex String");
-                menu.radio_value(&mut self.display_variant, DisplayVariant::Int, "i64");
                 menu.radio_value(&mut self.display_variant, DisplayVariant::VarInt, "VarInt");
             });
 
@@ -156,18 +155,13 @@ impl BytesInput {
                     DisplayVariant::Hex => hex::decode(&self.input)
                         .inspect_err(|_| self.err = true)
                         .unwrap_or_default(),
-                    DisplayVariant::Int => self
-                        .input
-                        .parse::<i64>()
-                        .map(|int| int.to_be_bytes().to_vec())
-                        .inspect_err(|_| self.err = true)
-                        .unwrap_or_default(),
                     DisplayVariant::VarInt => self
                         .input
                         .parse::<i64>()
                         .map(|int| int.encode_var_vec())
                         .inspect_err(|_| self.err = true)
                         .unwrap_or_default(),
+                    _ => Vec::new(),
                 }
             }
         });
