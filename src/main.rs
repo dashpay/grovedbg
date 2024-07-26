@@ -6,19 +6,16 @@ mod test_utils;
 mod ui;
 
 use std::{
-    collections::BTreeMap,
     sync::{Arc, Mutex},
     time::Duration,
 };
 
 use eframe::egui::{self, emath::TSTransform, Vec2, Visuals};
 use fetch::Message;
-use model::{
-    path_display::{Path, PathCtx},
-    Node,
-};
+use model::path_display::PathCtx;
 use profiles::{drive_profile, EnabledProfile};
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::mpsc::Sender;
+use ui::{ProofViewer, QueryBuilder};
 
 use crate::{model::Tree, ui::TreeDrawer};
 
@@ -28,6 +25,7 @@ fn main() {}
 #[cfg(target_arch = "wasm32")]
 fn main() {
     use profiles::drive_profile;
+    use tokio::sync::mpsc::channel;
 
     egui_logger::init().unwrap();
     eframe::WebLogger::init(log::LevelFilter::Debug).ok();
@@ -40,10 +38,12 @@ fn main() {
     drive_profile().enable_profile(path_ctx);
 
     let tree: Arc<Mutex<Tree>> = Arc::new(Mutex::new(Tree::new(path_ctx)));
+    let proof_viewer: Arc<Mutex<Option<ProofViewer>>> = Default::default();
 
     let t = Arc::clone(&tree);
+    let p = Arc::clone(&proof_viewer);
     wasm_bindgen_futures::spawn_local(async move {
-        fetch::process_messages(receiver, t.as_ref(), path_ctx).await;
+        fetch::process_messages(receiver, t.as_ref(), p.as_ref(), path_ctx).await;
     });
 
     sender.blocking_send(Message::FetchRoot).unwrap();
@@ -53,7 +53,7 @@ fn main() {
             .start(
                 "the_canvas_id", // hardcode it
                 web_options,
-                Box::new(move |cc| Box::new(App::new(cc, tree, path_ctx, sender))),
+                Box::new(move |cc| Box::new(App::new(cc, tree, proof_viewer, path_ctx, sender))),
             )
             .await
             .expect("failed to start eframe");
@@ -67,12 +67,15 @@ struct App<'c> {
     sender: Sender<Message>,
     // TODO: shouldn't be hardcoded eventually
     drive_profile: Option<EnabledProfile<'c>>,
+    query_builder: QueryBuilder<'c>,
+    proof_viewer: Arc<Mutex<Option<ProofViewer>>>,
 }
 
 impl<'c> App<'c> {
     fn new(
         _cc: &eframe::CreationContext<'_>,
         tree: Arc<Mutex<Tree<'c>>>,
+        proof_viewer: Arc<Mutex<Option<ProofViewer>>>,
         path_ctx: &'c PathCtx,
         sender: Sender<Message>,
     ) -> Self {
@@ -80,8 +83,10 @@ impl<'c> App<'c> {
             transform: TSTransform::from_translation(Vec2::new(1000., 500.)),
             tree,
             path_ctx,
+            query_builder: QueryBuilder::new(path_ctx, sender.clone()),
             sender,
             drive_profile: Some(drive_profile().enable_profile(path_ctx)),
+            proof_viewer,
         }
     }
 }
@@ -195,6 +200,25 @@ impl<'c> eframe::App for App<'c> {
                             });
                         }
                     }
+                });
+
+            egui::Window::new("Query builder")
+                .default_pos((0., 600.))
+                .default_open(false)
+                .show(ctx, |ui| self.query_builder.draw(ui));
+
+            egui::Window::new("Received proof")
+                .default_pos((0., 800.))
+                .default_open(false)
+                .show(ctx, |ui| {
+                    self.proof_viewer
+                        .lock()
+                        .unwrap()
+                        .as_mut()
+                        .map(|viewer| viewer.draw(ui))
+                        .unwrap_or_else(|| {
+                            ui.label("No proof fetched yet");
+                        })
                 });
 
             ctx.request_repaint_after(Duration::from_secs(5));

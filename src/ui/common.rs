@@ -63,6 +63,16 @@ pub(crate) fn bytes_by_display_variant(bytes: &[u8], display_variant: &DisplayVa
     }
 }
 
+pub(crate) fn bytes_by_display_variant_explicit(bytes: &[u8], display_variant: &DisplayVariant) -> String {
+    match display_variant {
+        DisplayVariant::U8 => format!("{bytes:?}"),
+        DisplayVariant::String => String::from_utf8_lossy(bytes).to_string(),
+        DisplayVariant::Hex => hex::encode(bytes),
+        DisplayVariant::Int => bytes_as_int(bytes),
+        DisplayVariant::VarInt => bytes_as_varint(bytes),
+    }
+}
+
 /// Represent binary data different ways and to choose from
 pub(crate) fn binary_label_colored<'a>(
     ui: &mut egui::Ui,
@@ -70,21 +80,26 @@ pub(crate) fn binary_label_colored<'a>(
     display_variant: &mut DisplayVariant,
     color: Color32,
 ) -> Response {
-    let text = bytes_by_display_variant(bytes, &display_variant);
-    display_variant_dropdown(ui, &text, display_variant, color)
+    display_variant_dropdown(ui, bytes, display_variant, color)
 }
 
 fn display_variant_dropdown<'a>(
     ui: &mut egui::Ui,
-    text: &str,
+    bytes: &[u8],
     display_variant: &mut DisplayVariant,
     color: Color32,
 ) -> Response {
-    let response = ui.add(
-        Label::new(RichText::new(text).color(color))
-            .truncate(true)
-            .sense(Sense::click()),
-    );
+    let text = bytes_by_display_variant(bytes, display_variant);
+    let response = ui
+        .add(
+            Label::new(RichText::new(text).color(color))
+                .truncate(true)
+                .sense(Sense::click()),
+        )
+        .on_hover_ui(|hover| {
+            hover.label(bytes_by_display_variant_explicit(bytes, display_variant));
+        });
+
     response.context_menu(|menu| {
         menu.radio_value(display_variant, DisplayVariant::U8, "u8 array");
         menu.radio_value(display_variant, DisplayVariant::String, "UTF-8 String");
@@ -143,6 +158,10 @@ pub(crate) fn path_label<'a>(ui: &mut egui::Ui, path: Path<'a>) -> egui::Respons
             });
 
             let response = ui.label(text);
+
+            if response.clicked() {
+                path.select_for_query();
+            }
 
             response.on_hover_ui_at_pointer(|hover_ui| {
                 let mut text = String::from("[");

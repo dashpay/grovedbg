@@ -9,18 +9,17 @@ edition = "2021"
 eframe = "0.27.2"
 egui_logger = "0.4.4"
 futures = "0.3.30"
-grovedbg-types = { git = "https://github.com/dashpay/grovedb", branch = "grove-dbg" }
+grovedbg-types = { git = "https://github.com/dashpay/grovedb", rev = "96dd04e8269e718d24c83917fe70edebd126f2e6"}
 hex = "0.4.3"
 integer-encoding = "4.0.0"
-log = "0.4.21"
-reqwest = { version = "0.12.4", features = ["json"] }
+log = "0.4.22"
+reqwest = { version = "0.12.5", features = ["json"] }
 slab = "0.4.9"
-strum = { version = "0.26.2", features = ["strum_macros", "derive"] }
-thiserror = "1.0.60"
-tokio = { version = "1.37.0", features = ["rt", "sync"] }
+strum = { version = "0.26.3", features = ["strum_macros", "derive"] }
+thiserror = "1.0.62"
+tokio = { version = "1.38.0", features = ["rt", "sync"] }
 tracing-subscriber = "0.3.18"
-wasm-bindgen-futures = "0.4.36"
+wasm-bindgen-futures = "0.4.42"
 web-sys = "0.3.69"
-wasm-bindgen = "=0.2.92"
 
 [workspace]

@@ -10,7 +10,7 @@ use eframe::{
 use tokio::sync::mpsc::Sender;
 
 use super::{
-    common::path_label,
+    common::{binary_label, path_label},
     node::{draw_element, draw_node},
 };
 use crate::{
@@ -19,7 +19,7 @@ use crate::{
 };
 
 pub(crate) const CELL_X: f32 = 300.0;
-pub(crate) const CELL_Y: f32 = 200.0;
+pub(crate) const CELL_Y: f32 = 250.0;
 
 const KV_PER_PAGE: usize = 10;
 
@@ -120,7 +120,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
 
                     // let (node, _, key) = cur_node_ctx.split();
 
-                    if let Element::Reference { path, key } = &cur_node_ctx.node().element {
+                    if let Element::Reference { path, key, .. } = &cur_node_ctx.node().element {
                         self.references.push((
                             cur_node_ctx.node().ui_state.borrow().output_point,
                             path.clone(),
@@ -276,6 +276,7 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                             if let Element::Reference {
                                 path: ref_path,
                                 key: ref_key,
+                                ..
                             } = &node_ctx.node().element
                             {
                                 if subtree_ctx.path() != *ref_path {

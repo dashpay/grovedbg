@@ -12,9 +12,11 @@ use crate::ui::{common::bytes_by_display_variant, DisplayVariant};
 
 type SegmentId = usize;
 
+#[derive(Default)]
 pub(crate) struct PathCtx {
     slab: RefCell<Slab<PathSegment>>,
     root_children_slab_ids: RefCell<Vec<SegmentId>>,
+    selected_for_query: RefCell<Option<SegmentId>>,
 }
 
 impl fmt::Debug for PathCtx {
@@ -25,10 +27,7 @@ impl fmt::Debug for PathCtx {
 
 impl PathCtx {
     pub fn new() -> Self {
-        PathCtx {
-            slab: Default::default(),
-            root_children_slab_ids: Default::default(),
-        }
+        Default::default()
     }
 
     pub fn get_root(&self) -> Path {
@@ -65,6 +64,13 @@ impl PathCtx {
             current_path = current_path.child(segment.as_ref().to_vec());
         }
         current_path
+    }
+
+    pub fn get_selected_for_query(&self) -> Option<Path> {
+        self.selected_for_query.borrow().map(|id| Path {
+            head_slab_id: Some(id),
+            ctx: self,
+        })
     }
 }
 
@@ -313,6 +319,10 @@ impl<'c> Path<'c> {
             );
             f(desc_path);
         }
+    }
+
+    pub fn select_for_query(&self) {
+        *self.ctx.selected_for_query.borrow_mut() = self.head_slab_id;
     }
 }
 

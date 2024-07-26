@@ -3,12 +3,15 @@ mod proto_conversion;
 use std::{collections::VecDeque, sync::Mutex};
 
 use futures::TryFutureExt;
-use grovedbg_types::{NodeFetchRequest, NodeUpdate, RootFetchRequest};
+use grovedbg_types::{NodeFetchRequest, NodeUpdate, PathQuery, RootFetchRequest};
 use reqwest::Client;
 use tokio::sync::mpsc::Receiver;
 
 use self::proto_conversion::{from_update, BadProtoElement};
-use crate::model::{path_display::PathCtx, Key, Node, Tree};
+use crate::{
+    model::{path_display::PathCtx, Key, Node, Tree},
+    ui::ProofViewer,
+};
 
 type Path = Vec<Vec<u8>>;
 
@@ -17,6 +20,7 @@ pub(crate) enum Message {
     FetchNode { path: Path, key: Key, show: bool },
     FetchBranch { path: Path, key: Key, limit: FetchLimit },
     UnloadSubtree { path: Path },
+    ExecutePathQuery { path_query: PathQuery },
 }
 
 pub(crate) enum FetchLimit {
@@ -42,6 +46,7 @@ fn base_url() -> String {
 
 async fn process_message<'c>(
     tree: &Mutex<Tree<'c>>,
+    proof_viewer: &Mutex<Option<ProofViewer>>,
     path_ctx: &'c PathCtx,
     client: &Client,
     message: Message,
@@ -147,6 +152,19 @@ async fn process_message<'c>(
             let mut lock = tree.lock().unwrap();
             lock.clear_subtree(path_ctx.add_path(path));
         }
+        Message::ExecutePathQuery { path_query } => {
+            if let Ok(proof) = client
+                .post(format!("{}/execute_path_query", base_url()))
+                .json(&path_query)
+                .send()
+                .and_then(|response| response.json::<grovedbg_types::Proof>())
+                .await
+                .inspect_err(|e| log::error!("Error executing a path query: {}", e))
+            {
+                let mut lock = proof_viewer.lock().unwrap();
+                *lock = Some(ProofViewer::new(proof));
+            }
+        }
     }
     Ok(())
 }
@@ -162,12 +180,13 @@ impl<E: std::error::Error> From<E> for ProcessError {
 pub(crate) async fn process_messages<'c>(
     mut receiver: Receiver<Message>,
     tree: &Mutex<Tree<'c>>,
+    proof_viewer: &Mutex<Option<ProofViewer>>,
     path_ctx: &'c PathCtx,
 ) {
     let client = Client::new();
 
     while let Some(message) = receiver.recv().await {
-        if let Err(e) = process_message(tree, path_ctx, &client, message).await {
+        if let Err(e) = process_message(tree, proof_viewer, path_ctx, &client, message).await {
             log::error!("{}", e.0);
         }
     }

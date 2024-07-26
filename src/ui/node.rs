@@ -1,7 +1,7 @@
-use std::borrow::Borrow;
+use std::borrow::{Borrow, BorrowMut};
 
 use eframe::{
-    egui::{self, Label, Layout, Response, RichText, Vec2},
+    egui::{self, Label, Layout, RichText, Vec2},
     emath::TSTransform,
     epaint::{Color32, Stroke},
 };
@@ -10,7 +10,6 @@ use tokio::sync::mpsc::Sender;
 use super::{
     common::{binary_label, binary_label_colored, bytes_by_display_variant, path_label},
     tree::CELL_X,
-    DisplayVariant, TreeDrawer,
 };
 use crate::{
     fetch::Message,
@@ -94,6 +93,10 @@ pub(crate) fn draw_node<'a, 'c>(
 pub(crate) fn draw_element(ui: &mut egui::Ui, transform: &mut TSTransform, node_ctx: &NodeCtx) {
     // Draw key
     ui.horizontal(|key_line| {
+        if key_line.button("#").clicked() {
+            let mut state = node_ctx.node().ui_state.borrow_mut();
+            state.show_hashes = !state.show_hashes;
+        }
         if matches!(
             node_ctx.node().element,
             Element::Subtree { .. } | Element::Sumtree { .. }
@@ -144,33 +147,86 @@ pub(crate) fn draw_element(ui: &mut egui::Ui, transform: &mut TSTransform, node_
     // Draw value
     let node = node_ctx.node();
 
-    let layout = Layout::left_to_right(egui::Align::Min);
-    ui.allocate_ui_with_layout(
-        Vec2::new(CELL_X, 20.),
-        layout,
-        |value_ui: &mut egui::Ui| match &node.element {
-            Element::Item { value } => binary_label(
-                value_ui,
-                value,
-                &mut node.ui_state.borrow_mut().item_display_variant,
-            ),
-            Element::SumItem { value } => value_ui.label(format!("Value: {value}")),
-            Element::Reference { path, key } => {
-                path_label(value_ui, *path);
-                value_ui
-                    .horizontal(|line| {
-                        line.add_space(20.0);
-                        line.label(bytes_by_display_variant(
-                            key,
-                            &mut node.ui_state.borrow_mut().item_display_variant,
-                        ));
-                    })
-                    .response
+    let layout = Layout::top_down(egui::Align::Min);
+    ui.allocate_ui_with_layout(Vec2::new(CELL_X, 20.), layout, |value_ui: &mut egui::Ui| {
+        match &node.element {
+            Element::Item { value, element_flags } => {
+                let mut state = node.ui_state.borrow_mut();
+                binary_label(value_ui, value, &mut state.item_display_variant);
+                if let Some(flags) = element_flags {
+                    value_ui.horizontal(|line| {
+                        line.label("Flags:");
+                        binary_label(line, flags, &mut state.flags_display_variant);
+                    });
+                }
             }
-            Element::Sumtree { sum, .. } => value_ui.label(format!("Sum: {sum}")),
-            Element::Subtree { .. } | Element::SubtreePlaceholder => value_ui.label("Subtree"),
-        },
-    );
+            Element::SumItem { value, element_flags } => {
+                value_ui.label(format!("Value: {value}"));
+                if let Some(flags) = element_flags {
+                    value_ui.horizontal(|line| {
+                        line.label("Flags:");
+                        binary_label(line, flags, &mut node.ui_state.borrow_mut().flags_display_variant);
+                    });
+                }
+            }
+            Element::Reference {
+                path,
+                key,
+                element_flags,
+            } => {
+                let mut state = node.ui_state.borrow_mut();
+                path_label(value_ui, *path);
+                value_ui.horizontal(|line| {
+                    line.add_space(20.0);
+                    line.label(bytes_by_display_variant(key, &mut state.item_display_variant));
+                });
+                if let Some(flags) = element_flags {
+                    value_ui.horizontal(|line| {
+                        line.label("Flags:");
+                        binary_label(line, flags, &mut state.flags_display_variant);
+                    });
+                }
+            }
+            Element::Sumtree {
+                sum, element_flags, ..
+            } => {
+                value_ui.label(format!("Sum: {sum}"));
+                if let Some(flags) = element_flags {
+                    value_ui.horizontal(|line| {
+                        line.label("Flags:");
+                        binary_label(line, flags, &mut node.ui_state.borrow_mut().flags_display_variant);
+                    });
+                }
+            }
+            Element::Subtree { element_flags, .. } => {
+                value_ui.label("Subtree");
+                if let Some(flags) = element_flags {
+                    value_ui.horizontal(|line| {
+                        line.label("Flags:");
+                        binary_label(line, flags, &mut node.ui_state.borrow_mut().flags_display_variant);
+                    });
+                }
+            }
+            Element::SubtreePlaceholder => {
+                value_ui.label("Subtree");
+            }
+        };
+        let mut state = node_ctx.node().ui_state.borrow_mut();
+        if state.show_hashes {
+            if let Some(kv_digest_hash) = node_ctx.node().kv_digest_hash {
+                value_ui.horizontal(|line| {
+                    line.label("KV digest hash:");
+                    binary_label(line, &kv_digest_hash, &mut state.kv_digest_hash_display_variant);
+                });
+            }
+            if let Some(value_hash) = node_ctx.node().value_hash {
+                value_ui.horizontal(|line| {
+                    line.label("Value hash:");
+                    binary_label(line, &value_hash, &mut state.value_hash_display_variant);
+                });
+            }
+        }
+    });
 }
 
 pub(crate) fn element_to_color(element: &Element) -> Color32 {
