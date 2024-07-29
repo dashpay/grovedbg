@@ -36,15 +36,20 @@ impl<'p> QueryBuilder<'p> {
             self.offset_input.draw(ui);
             self.query.draw(ui);
 
-            if ui.button("Execute").clicked() {
-                self.execute_query();
-            }
+            ui.horizontal(|line| {
+                if line.button("Prove").clicked() {
+                    self.prove_query();
+                }
+                if line.button("Fetch").clicked() {
+                    self.fetch_query();
+                }
+            });
         } else {
             ui.label("No query path selected, click on a subtree header with path first");
         }
     }
 
-    fn execute_query(&self) {
+    fn prove_query(&self) {
         if let Some(path) = self.path_ctx.get_selected_for_query() {
             let path_query = PathQuery {
                 path: path.to_vec(),
@@ -56,7 +61,25 @@ impl<'p> QueryBuilder<'p> {
             };
 
             self.sender
-                .blocking_send(Message::ExecutePathQuery { path_query })
+                .blocking_send(Message::ProvePathQuery { path_query })
+                .inspect_err(|_| log::error!("Can't reach data fetching thread"))
+                .ok();
+        }
+    }
+
+    fn fetch_query(&self) {
+        if let Some(path) = self.path_ctx.get_selected_for_query() {
+            let path_query = PathQuery {
+                path: path.to_vec(),
+                query: grovedbg_types::SizedQuery {
+                    query: self.query.get_query(),
+                    limit: self.limit_input.number,
+                    offset: self.offset_input.number,
+                },
+            };
+
+            self.sender
+                .blocking_send(Message::FetchWithPathQuery { path_query })
                 .inspect_err(|_| log::error!("Can't reach data fetching thread"))
                 .ok();
         }

@@ -20,7 +20,8 @@ pub(crate) enum Message {
     FetchNode { path: Path, key: Key, show: bool },
     FetchBranch { path: Path, key: Key, limit: FetchLimit },
     UnloadSubtree { path: Path },
-    ExecutePathQuery { path_query: PathQuery },
+    ProvePathQuery { path_query: PathQuery },
+    FetchWithPathQuery { path_query: PathQuery },
 }
 
 pub(crate) enum FetchLimit {
@@ -152,17 +153,36 @@ async fn process_message<'c>(
             let mut lock = tree.lock().unwrap();
             lock.clear_subtree(path_ctx.add_path(path));
         }
-        Message::ExecutePathQuery { path_query } => {
+        Message::ProvePathQuery { path_query } => {
             if let Ok(proof) = client
-                .post(format!("{}/execute_path_query", base_url()))
+                .post(format!("{}/prove_path_query", base_url()))
                 .json(&path_query)
                 .send()
                 .and_then(|response| response.json::<grovedbg_types::Proof>())
                 .await
-                .inspect_err(|e| log::error!("Error executing a path query: {}", e))
+                .inspect_err(|e| log::error!("Error executing a path query with proof: {}", e))
             {
                 let mut lock = proof_viewer.lock().unwrap();
                 *lock = Some(ProofViewer::new(proof));
+            }
+        }
+        Message::FetchWithPathQuery { path_query } => {
+            if let Ok(updates) = client
+                .post(format!("{}/fetch_with_path_query", base_url()))
+                .json(&path_query)
+                .send()
+                .and_then(|response| response.json::<Vec<grovedbg_types::NodeUpdate>>())
+                .await
+                .inspect_err(|e| log::error!("Error fetching with a path query: {}", e))
+            {
+                let mut lock = tree.lock().unwrap();
+                for node in updates.into_iter() {
+                    lock.insert(
+                        path_ctx.add_path(node.path.clone()),
+                        node.key.clone(),
+                        from_update(&path_ctx, node)?,
+                    )
+                }
             }
         }
     }

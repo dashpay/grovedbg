@@ -97,7 +97,7 @@ pub(crate) fn draw_element(ui: &mut egui::Ui, transform: &mut TSTransform, node_
         }
         if matches!(
             node_ctx.node().element,
-            Element::Subtree { .. } | Element::Sumtree { .. }
+            Element::Subtree { .. } | Element::Sumtree { .. } | Element::SubtreePlaceholder
         ) {
             let prev_visibility = node_ctx.subtree_ctx().is_child_visible(node_ctx.key());
             let mut visibility = prev_visibility;
