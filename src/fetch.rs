@@ -1,6 +1,6 @@
 mod proto_conversion;
 
-use std::{collections::VecDeque, sync::Mutex};
+use std::sync::Mutex;
 
 use futures::TryFutureExt;
 use grovedbg_types::{NodeFetchRequest, NodeUpdate, PathQuery, RootFetchRequest};
@@ -9,7 +9,7 @@ use tokio::sync::mpsc::Receiver;
 
 use self::proto_conversion::{from_update, BadProtoElement};
 use crate::{
-    model::{path_display::PathCtx, Key, Node, Tree},
+    model::{path_display::PathCtx, Key, Tree},
     ui::ProofViewer,
 };
 
@@ -18,15 +18,9 @@ type Path = Vec<Vec<u8>>;
 pub(crate) enum Message {
     FetchRoot,
     FetchNode { path: Path, key: Key, show: bool },
-    FetchBranch { path: Path, key: Key, limit: FetchLimit },
     UnloadSubtree { path: Path },
     ProvePathQuery { path_query: PathQuery },
     FetchWithPathQuery { path_query: PathQuery },
-}
-
-pub(crate) enum FetchLimit {
-    Unbounded,
-    Count(usize),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -103,51 +97,6 @@ async fn process_message<'c>(
                         ctx.subtree().set_visible(true);
                     });
             }
-        }
-        Message::FetchBranch { path, key, limit } => {
-            log::info!("Fetching subtree branch...");
-            let mut queue = VecDeque::new();
-            queue.push_back(key.clone());
-
-            let mut to_insert = Vec::new();
-
-            while let Some(node_key) = queue.pop_front() {
-                if let FetchLimit::Count(max_n) = limit {
-                    if to_insert.len() >= max_n {
-                        break;
-                    }
-                }
-                let Ok(Some(node_update)) = client
-                    .post(format!("{}/fetch_node", base_url()))
-                    .json(&NodeFetchRequest {
-                        path: path.clone(),
-                        key: node_key.clone(),
-                    })
-                    .send()
-                    .and_then(|response| response.json::<Option<NodeUpdate>>())
-                    .await
-                    .map_err(|e| log::error!("Branch fetching error: {}; attempting to load others...", e))
-                else {
-                    continue;
-                };
-
-                let node: Node = from_update(path_ctx, node_update)?;
-
-                if let Some(left) = &node.left_child {
-                    queue.push_back(left.clone());
-                }
-
-                if let Some(right) = &node.right_child {
-                    queue.push_back(right.clone());
-                }
-
-                to_insert.push((node_key, node));
-            }
-
-            let mut lock = tree.lock().unwrap();
-            to_insert
-                .into_iter()
-                .for_each(|(key, node)| lock.insert(path_ctx.add_path(path.clone()), key, node));
         }
         Message::UnloadSubtree { path } => {
             let mut lock = tree.lock().unwrap();

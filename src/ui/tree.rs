@@ -7,14 +7,15 @@ use eframe::{
     emath::TSTransform,
     epaint::{Color32, Pos2, Rect, Stroke},
 };
+use grovedbg_types::{PathQuery, Query, QueryItem, SizedQuery, SubqueryBranch};
 use tokio::sync::mpsc::Sender;
 
 use super::{
-    common::{binary_label, path_label},
+    common::path_label,
     node::{draw_element, draw_node},
 };
 use crate::{
-    fetch::{FetchLimit, Message},
+    fetch::Message,
     model::{path_display::Path, Element, Key, KeySlice, NodeCtx, SubtreeCtx, Tree},
 };
 
@@ -211,31 +212,53 @@ impl<'u, 't, 'c> TreeDrawer<'u, 't, 'c> {
                             }
 
                             if menu.button("Fetch all").clicked() {
-                                if let Some(key) = &subtree.root_node {
-                                    let _ = self
-                                        .sender
-                                        .blocking_send(Message::FetchBranch {
+                                let _ = self
+                                    .sender
+                                    .blocking_send(Message::FetchWithPathQuery {
+                                        path_query: PathQuery {
                                             path: subtree_ctx.path().to_vec(),
-                                            key: key.clone(),
-                                            limit: FetchLimit::Unbounded,
-                                        })
-                                        .inspect_err(|_| log::error!("Can't reach data fetching thread"));
-                                }
+                                            query: SizedQuery {
+                                                query: Query {
+                                                    items: vec![QueryItem::RangeFull],
+                                                    default_subquery_branch: SubqueryBranch {
+                                                        subquery_path: None,
+                                                        subquery: None,
+                                                    },
+                                                    conditional_subquery_branches: Vec::new(),
+                                                    left_to_right: true,
+                                                },
+                                                limit: None,
+                                                offset: None,
+                                            },
+                                        },
+                                    })
+                                    .inspect_err(|_| log::error!("Can't reach data fetching thread"));
                             }
 
                             if menu.button("Fetch first 100").clicked() {
-                                if let Some(key) = &subtree.root_node {
-                                    let _ = self
-                                        .sender
-                                        .blocking_send(Message::FetchBranch {
+                                let _ = self
+                                    .sender
+                                    .blocking_send(Message::FetchWithPathQuery {
+                                        path_query: PathQuery {
                                             path: subtree_ctx.path().to_vec(),
-                                            key: key.clone(),
-                                            limit: FetchLimit::Count(100),
-                                        })
-                                        .inspect_err(|_| {
-                                            log::error!("Can't reach data fetching thread");
-                                        });
-                                }
+                                            query: SizedQuery {
+                                                query: Query {
+                                                    items: vec![QueryItem::RangeFull],
+                                                    default_subquery_branch: SubqueryBranch {
+                                                        subquery_path: None,
+                                                        subquery: None,
+                                                    },
+                                                    conditional_subquery_branches: Vec::new(),
+                                                    left_to_right: true,
+                                                },
+                                                limit: Some(100),
+                                                offset: None,
+                                            },
+                                        },
+                                    })
+                                    .inspect_err(|_| {
+                                        log::error!("Can't reach data fetching thread");
+                                    });
                             }
 
                             if let Some(key) = &subtree.root_node {

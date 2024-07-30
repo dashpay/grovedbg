@@ -5,7 +5,7 @@ use grovedbg_types::{PathQuery, Query, QueryItem, SubqueryBranch};
 use integer_encoding::VarInt;
 use tokio::sync::mpsc::Sender;
 
-use super::{common::path_label, DisplayVariant};
+use super::common::path_label;
 use crate::{fetch::Message, model::path_display::PathCtx};
 
 const MARGIN: f32 = 20.;
@@ -128,10 +128,24 @@ impl OptionalNumberInput {
     }
 }
 
+#[derive(PartialEq)]
+enum BytesInputDisplayVariant {
+    U8,
+    String,
+    Hex,
+    VarInt,
+    I16,
+    I32,
+    I64,
+    U16,
+    U32,
+    U64,
+}
+
 struct BytesInput {
     bytes: Vec<u8>,
     input: String,
-    display_variant: DisplayVariant,
+    display_variant: BytesInputDisplayVariant,
     label: String,
     err: bool,
 }
@@ -141,7 +155,7 @@ impl BytesInput {
         Self {
             bytes: Vec::new(),
             input: String::new(),
-            display_variant: DisplayVariant::Hex,
+            display_variant: BytesInputDisplayVariant::Hex,
             label,
             err: false,
         }
@@ -158,30 +172,88 @@ impl BytesInput {
             let response = line.text_edit_singleline(&mut self.input).labelled_by(label.id);
 
             response.context_menu(|menu| {
-                menu.radio_value(&mut self.display_variant, DisplayVariant::U8, "u8 array");
-                menu.radio_value(&mut self.display_variant, DisplayVariant::String, "UTF-8 String");
-                menu.radio_value(&mut self.display_variant, DisplayVariant::Hex, "Hex String");
-                menu.radio_value(&mut self.display_variant, DisplayVariant::VarInt, "VarInt");
+                menu.radio_value(
+                    &mut self.display_variant,
+                    BytesInputDisplayVariant::U8,
+                    "u8 array",
+                );
+                menu.radio_value(
+                    &mut self.display_variant,
+                    BytesInputDisplayVariant::String,
+                    "UTF-8 String",
+                );
+                menu.radio_value(
+                    &mut self.display_variant,
+                    BytesInputDisplayVariant::Hex,
+                    "Hex String",
+                );
+                menu.radio_value(
+                    &mut self.display_variant,
+                    BytesInputDisplayVariant::VarInt,
+                    "VarInt",
+                );
+                menu.radio_value(&mut self.display_variant, BytesInputDisplayVariant::I16, "i16");
+                menu.radio_value(&mut self.display_variant, BytesInputDisplayVariant::I32, "i32");
+                menu.radio_value(&mut self.display_variant, BytesInputDisplayVariant::I64, "i64");
+                menu.radio_value(&mut self.display_variant, BytesInputDisplayVariant::U16, "u16");
+                menu.radio_value(&mut self.display_variant, BytesInputDisplayVariant::U32, "u32");
+                menu.radio_value(&mut self.display_variant, BytesInputDisplayVariant::U64, "u64");
             });
 
             if response.lost_focus() {
                 self.err = false;
                 self.bytes = match self.display_variant {
-                    DisplayVariant::U8 => self
+                    BytesInputDisplayVariant::U8 => self
                         .input
                         .split_whitespace()
                         .map(|int| int.parse::<u8>())
                         .collect::<Result<Vec<u8>, _>>()
                         .inspect_err(|_| self.err = true)
                         .unwrap_or_default(),
-                    DisplayVariant::String => self.input.as_bytes().to_vec(),
-                    DisplayVariant::Hex => hex::decode(&self.input)
+                    BytesInputDisplayVariant::String => self.input.as_bytes().to_vec(),
+                    BytesInputDisplayVariant::Hex => hex::decode(&self.input)
                         .inspect_err(|_| self.err = true)
                         .unwrap_or_default(),
-                    DisplayVariant::VarInt => self
+                    BytesInputDisplayVariant::VarInt => self
                         .input
                         .parse::<i64>()
                         .map(|int| int.encode_var_vec())
+                        .inspect_err(|_| self.err = true)
+                        .unwrap_or_default(),
+                    BytesInputDisplayVariant::I16 => self
+                        .input
+                        .parse::<i16>()
+                        .map(|int| int.to_be_bytes().to_vec())
+                        .inspect_err(|_| self.err = true)
+                        .unwrap_or_default(),
+                    BytesInputDisplayVariant::I32 => self
+                        .input
+                        .parse::<i32>()
+                        .map(|int| int.to_be_bytes().to_vec())
+                        .inspect_err(|_| self.err = true)
+                        .unwrap_or_default(),
+                    BytesInputDisplayVariant::I64 => self
+                        .input
+                        .parse::<i64>()
+                        .map(|int| int.to_be_bytes().to_vec())
+                        .inspect_err(|_| self.err = true)
+                        .unwrap_or_default(),
+                    BytesInputDisplayVariant::U16 => self
+                        .input
+                        .parse::<u16>()
+                        .map(|int| int.to_be_bytes().to_vec())
+                        .inspect_err(|_| self.err = true)
+                        .unwrap_or_default(),
+                    BytesInputDisplayVariant::U32 => self
+                        .input
+                        .parse::<u32>()
+                        .map(|int| int.to_be_bytes().to_vec())
+                        .inspect_err(|_| self.err = true)
+                        .unwrap_or_default(),
+                    BytesInputDisplayVariant::U64 => self
+                        .input
+                        .parse::<u64>()
+                        .map(|int| int.to_be_bytes().to_vec())
                         .inspect_err(|_| self.err = true)
                         .unwrap_or_default(),
                     _ => Vec::new(),
