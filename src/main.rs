@@ -1,3 +1,4 @@
+use eframe::egui::{Style, Visuals};
 use futures::channel::mpsc::channel;
 
 // Desktop application version
@@ -8,12 +9,12 @@ fn main() {
         .and_then(|s| s.parse().ok())
     else {
         return eprintln!(
-            "`GROVEDBG_ADDRESS` env variable must containt IPv4 address or consider accessing GroveDBG web \
+            "`GROVEDBG_ADDRESS` env variable must contain a URL or consider accessing GroveDBG web \
              interface directly"
         );
     };
 
-    egui_logger::builder().init().unwrap();
+    egui_logger::builder().init().expect("unable to setup logger");
 
     let native_options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
@@ -42,6 +43,11 @@ fn main() {
         "GroveDBG",
         native_options,
         Box::new(|cc| {
+            let style = Style {
+                visuals: Visuals::dark(),
+                ..Style::default()
+            };
+            cc.egui_ctx.set_style(style);
             Ok(grovedbg::start_grovedbg_app(
                 cc,
                 commands_sender,
@@ -55,7 +61,7 @@ fn main() {
 // Web application version, served by a running GroveDB
 #[cfg(target_arch = "wasm32")]
 fn main() {
-    eframe::WebLogger::init(log::LevelFilter::Debug).ok();
+    egui_logger::builder().init().expect("unable to setup logger");
 
     let web_options = eframe::WebOptions::default();
 
@@ -81,6 +87,11 @@ fn main() {
                 "the_canvas_id",
                 web_options,
                 Box::new(|cc| {
+                    let style = Style {
+                        visuals: Visuals::dark(),
+                        ..Style::default()
+                    };
+                    cc.egui_ctx.set_style(style);
                     Ok(grovedbg::start_grovedbg_app(
                         cc,
                         commands_sender,
@@ -98,7 +109,6 @@ fn main() {
             match start_result {
                 Ok(_) => {
                     loading_text.remove();
-                    egui_logger::builder().init().unwrap();
                 }
                 Err(e) => {
                     loading_text.set_inner_html(
