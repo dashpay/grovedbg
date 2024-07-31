@@ -19,8 +19,6 @@ pollster = "0.3.0"
 reqwest = { version = "0.12.5", features = ["json"] }
 slab = "0.4.9"
 strum = { version = "0.26.3", features = ["strum_macros", "derive"] }
-thiserror = "1.0.63"
-tracing-subscriber = "0.3.18"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen-futures = "0.4.42"

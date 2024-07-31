@@ -6,16 +6,14 @@ mod protocol;
 
 use eframe::{egui, App, CreationContext};
 use futures::channel::mpsc::{Receiver, Sender};
-use grovedbg_types::NodeUpdate;
-
 pub use protocol::start_grovedbg_protocol;
-use protocol::Command;
+use protocol::{Command, GroveGdbUpdate};
 
 /// Starts the GroveDBG application.
 pub fn start_grovedbg_app(
     cc: &CreationContext,
     commands_sender: Sender<Command>,
-    updates_receiver: Receiver<NodeUpdate>,
+    updates_receiver: Receiver<GroveGdbUpdate>,
 ) -> Box<dyn App> {
     Box::new(GroveDbgApp {})
 }
