@@ -1,5 +1,5 @@
 use eframe::egui::{Style, Visuals};
-use futures::channel::mpsc::channel;
+use tokio::sync::mpsc::channel;
 
 // Desktop application version
 #[cfg(not(target_arch = "wasm32"))]

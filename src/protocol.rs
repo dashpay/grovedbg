@@ -1,20 +1,18 @@
-use futures::{
-    channel::mpsc::{Receiver, Sender},
-    SinkExt, StreamExt, TryFutureExt,
-};
+use futures::TryFutureExt;
 use grovedbg_types::{Key, NodeFetchRequest, NodeUpdate, Path, PathQuery, Proof, RootFetchRequest};
 use reqwest::{Client, Url};
+use tokio::sync::mpsc::{Receiver, Sender};
 
 /// Starts the data exchange process between GroveDBG application and GroveDB's
 /// debugger endpoint.
 pub async fn start_grovedbg_protocol(
     address: Url,
     mut commands_receiver: Receiver<Command>,
-    mut updates_sender: Sender<GroveGdbUpdate>,
+    updates_sender: Sender<GroveGdbUpdate>,
 ) {
     let client = Client::new();
 
-    while let Some(cmd) = commands_receiver.next().await {
+    while let Some(cmd) = commands_receiver.recv().await {
         let updates = match process_command(&address, &client, cmd).await {
             Ok(x) => x,
             Err(e) => {
@@ -24,11 +22,8 @@ pub async fn start_grovedbg_protocol(
         };
 
         if let Err(send_error) = updates_sender.send(updates).await {
-            log::error!("Unable to send update: {send_error}");
-            if send_error.is_disconnected() {
-                log::error!("Terminating the protocol task");
-                return;
-            }
+            log::error!("Unable to send update: {send_error}; terminating the protocol task");
+            return;
         }
     }
 }
