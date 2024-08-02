@@ -3,34 +3,30 @@ use grovedbg_types::{PathQuery, Query, QueryItem, SubqueryBranch};
 use integer_encoding::VarInt;
 
 use crate::{
-    path_ctx::{path_label, PathCtx},
+    path_ctx::{path_label, Path, PathCtx},
     protocol::Command,
     CommandsSender,
 };
 
 const MARGIN: f32 = 20.;
 
-pub(crate) struct QueryBuilder<'p> {
-    path_ctx: &'p PathCtx,
-    commands_sender: CommandsSender,
+pub(crate) struct QueryBuilder {
     limit_input: OptionalNumberInput,
     offset_input: OptionalNumberInput,
     query: QueryInput,
 }
 
-impl<'p> QueryBuilder<'p> {
-    pub fn new(path_ctx: &'p PathCtx, sender: CommandsSender) -> Self {
+impl QueryBuilder {
+    pub fn new() -> Self {
         QueryBuilder {
-            path_ctx,
             limit_input: OptionalNumberInput::new("Limit".to_owned()),
             offset_input: OptionalNumberInput::new("Offset".to_owned()),
             query: QueryInput::new(0),
-            commands_sender: sender,
         }
     }
 
-    pub fn draw(&mut self, ui: &mut egui::Ui) {
-        if let Some(path) = self.path_ctx.get_selected_for_query() {
+    pub fn draw(&mut self, ui: &mut egui::Ui, path_ctx: &PathCtx, sender: &CommandsSender) {
+        if let Some(path) = path_ctx.get_selected_for_query() {
             path_label(ui, path);
             self.limit_input.draw(ui);
             self.offset_input.draw(ui);
@@ -38,10 +34,10 @@ impl<'p> QueryBuilder<'p> {
 
             ui.horizontal(|line| {
                 if line.button("Prove").clicked() {
-                    self.prove_query();
+                    self.prove_query(&path, sender);
                 }
                 if line.button("Fetch").clicked() {
-                    self.fetch_query();
+                    self.fetch_query(&path, sender);
                 }
             });
         } else {
@@ -49,40 +45,36 @@ impl<'p> QueryBuilder<'p> {
         }
     }
 
-    fn prove_query(&self) {
-        if let Some(path) = self.path_ctx.get_selected_for_query() {
-            let path_query = PathQuery {
-                path: path.to_vec(),
-                query: grovedbg_types::SizedQuery {
-                    query: self.query.get_query(),
-                    limit: self.limit_input.number,
-                    offset: self.offset_input.number,
-                },
-            };
+    fn prove_query(&self, path: &Path, sender: &CommandsSender) {
+        let path_query = PathQuery {
+            path: path.to_vec(),
+            query: grovedbg_types::SizedQuery {
+                query: self.query.get_query(),
+                limit: self.limit_input.number,
+                offset: self.offset_input.number,
+            },
+        };
 
-            self.commands_sender
-                .blocking_send(Command::ProvePathQuery { path_query })
-                .inspect_err(|_| log::error!("Can't reach data fetching thread"))
-                .ok();
-        }
+        sender
+            .blocking_send(Command::ProvePathQuery { path_query })
+            .inspect_err(|_| log::error!("Can't reach data fetching thread"))
+            .ok();
     }
 
-    fn fetch_query(&self) {
-        if let Some(path) = self.path_ctx.get_selected_for_query() {
-            let path_query = PathQuery {
-                path: path.to_vec(),
-                query: grovedbg_types::SizedQuery {
-                    query: self.query.get_query(),
-                    limit: self.limit_input.number,
-                    offset: self.offset_input.number,
-                },
-            };
+    fn fetch_query(&self, path: &Path, sender: &CommandsSender) {
+        let path_query = PathQuery {
+            path: path.to_vec(),
+            query: grovedbg_types::SizedQuery {
+                query: self.query.get_query(),
+                limit: self.limit_input.number,
+                offset: self.offset_input.number,
+            },
+        };
 
-            self.commands_sender
-                .blocking_send(Command::FetchWithPathQuery { path_query })
-                .inspect_err(|_| log::error!("Can't reach data fetching thread"))
-                .ok();
-        }
+        sender
+            .blocking_send(Command::FetchWithPathQuery { path_query })
+            .inspect_err(|_| log::error!("Can't reach data fetching thread"))
+            .ok();
     }
 }
 
