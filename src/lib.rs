@@ -7,6 +7,7 @@ mod path_ctx;
 mod proof_viewer;
 mod protocol;
 mod query_builder;
+mod tree_view;
 
 use std::time::Duration;
 
@@ -32,7 +33,7 @@ pub fn start_grovedbg_app(
     Box::new(GroveDbgApp {
         commands_sender,
         updates_receiver,
-        path_ctx: Box::leak(Box::new(PathCtx::new())),
+        path_ctx: PathCtx::new(),
         query_builder: QueryBuilder::new(),
         proof_viewer: None,
     })
@@ -41,7 +42,7 @@ pub fn start_grovedbg_app(
 struct GroveDbgApp {
     commands_sender: CommandsSender,
     updates_receiver: UpdatesReceiver,
-    path_ctx: &'static mut PathCtx,
+    path_ctx: PathCtx,
     query_builder: QueryBuilder,
     proof_viewer: Option<ProofViewer>,
 }
@@ -76,7 +77,7 @@ impl App for GroveDbgApp {
                 .outer_margin(PANEL_MARGIN)
                 .show(ui, |frame| {
                     self.query_builder
-                        .draw(frame, self.path_ctx, &self.commands_sender);
+                        .draw(frame, &self.path_ctx, &self.commands_sender);
                 });
         });
 
