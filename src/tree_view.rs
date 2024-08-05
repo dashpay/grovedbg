@@ -1,18 +1,60 @@
-use eframe::emath::TSTransform;
+mod element_view;
+mod subtree_view;
 
+use eframe::{
+    egui::{self, Rect},
+    emath::TSTransform,
+};
+
+use self::subtree_view::SubtreeView;
 use crate::path_ctx::{Path, PathCtx};
 
-mod element_view;
+pub(crate) struct TreeView<'a> {
+    transform: TSTransform,
+    path_ctx: &'a PathCtx,
+    root_subtree: SubtreeView<'a>,
+}
+
+impl<'a> TreeView<'a> {
+    pub(crate) fn new(path_ctx: &'a PathCtx) -> Self {
+        Self {
+            transform: TSTransform::default(),
+            root_subtree: SubtreeView::new(path_ctx.get_root()),
+            path_ctx,
+        }
+    }
+
+    pub(crate) fn draw(&mut self, ui: &mut egui::Ui) {
+        let (id, rect) = ui.allocate_space(ui.available_size());
+
+        let drag_response = ui.interact(rect, id, egui::Sense::click_and_drag());
+
+        if drag_response.dragged() {
+            self.transform.translation += drag_response.drag_delta();
+        }
+        if drag_response.double_clicked() {
+            self.transform = TSTransform::default();
+        }
+
+        self.root_subtree
+            .draw(TreeViewContext::new(self.path_ctx, &self.transform, rect), ui);
+    }
+}
 
 #[derive(Clone, Copy)]
 pub(crate) struct TreeViewContext<'a> {
     path_ctx: &'a PathCtx,
     transform: &'a TSTransform,
+    rect: Rect,
 }
 
 impl<'a> TreeViewContext<'a> {
-    pub(crate) fn new(path_ctx: &'a PathCtx, transform: &'a TSTransform) -> Self {
-        Self { path_ctx, transform }
+    pub(crate) fn new(path_ctx: &'a PathCtx, transform: &'a TSTransform, rect: Rect) -> Self {
+        Self {
+            path_ctx,
+            transform,
+            rect,
+        }
     }
 
     pub(crate) fn root_context(&self) -> SubtreeViewContext<'a> {

@@ -18,6 +18,7 @@ pub use protocol::start_grovedbg_protocol;
 use protocol::{Command, GroveGdbUpdate};
 use query_builder::QueryBuilder;
 use tokio::sync::mpsc::{Receiver, Sender};
+use tree_view::TreeView;
 
 const PANEL_MARGIN: f32 = 5.;
 
@@ -30,21 +31,25 @@ pub fn start_grovedbg_app(
     commands_sender: CommandsSender,
     updates_receiver: UpdatesReceiver,
 ) -> Box<dyn App> {
+    let path_ctx = Box::leak(Box::new(PathCtx::new()));
+
     Box::new(GroveDbgApp {
         commands_sender,
         updates_receiver,
-        path_ctx: PathCtx::new(),
+        path_ctx,
         query_builder: QueryBuilder::new(),
         proof_viewer: None,
+        tree_view: TreeView::new(path_ctx),
     })
 }
 
 struct GroveDbgApp {
     commands_sender: CommandsSender,
     updates_receiver: UpdatesReceiver,
-    path_ctx: PathCtx,
+    path_ctx: &'static PathCtx,
     query_builder: QueryBuilder,
     proof_viewer: Option<ProofViewer>,
+    tree_view: TreeView<'static>,
 }
 
 impl App for GroveDbgApp {
@@ -96,7 +101,7 @@ impl App for GroveDbgApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.label("Hello World!");
+            self.tree_view.draw(ui);
         });
 
         ctx.request_repaint_after(Duration::from_secs(5));

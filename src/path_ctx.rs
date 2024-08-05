@@ -325,6 +325,10 @@ impl<'c> Path<'c> {
     pub fn select_for_query(&self) {
         *self.ctx.selected_for_query.borrow_mut() = self.head_slab_id;
     }
+
+    pub fn id(&self) -> egui::Id {
+        egui::Id::new(self.head_slab_id.map(|x| x + 1).unwrap_or_default())
+    }
 }
 
 type SegmentsIter<'c> = iter::Rev<std::vec::IntoIter<&'c PathSegment>>;
