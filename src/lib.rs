@@ -27,10 +27,14 @@ type UpdatesReceiver = Receiver<GroveGdbUpdate>;
 
 /// Starts the GroveDBG application.
 pub fn start_grovedbg_app(
-    _cc: &CreationContext,
+    cc: &CreationContext,
     commands_sender: CommandsSender,
     updates_receiver: UpdatesReceiver,
 ) -> Box<dyn App> {
+    let mut fonts = egui::FontDefinitions::default();
+    egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+    cc.egui_ctx.set_fonts(fonts);
+
     let path_ctx = Box::leak(Box::new(PathCtx::new()));
 
     Box::new(GroveDbgApp {
