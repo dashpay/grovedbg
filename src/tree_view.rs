@@ -5,12 +5,12 @@ use eframe::{
     egui::{self, Rect},
     emath::TSTransform,
 };
+use subtree_view::SubtreeView;
 
 use crate::{
     path_ctx::{Path, PathCtx},
     CommandsSender,
 };
-use subtree_view::SubtreeView;
 
 const NODE_WIDTH: f32 = 300.;
 
@@ -32,13 +32,34 @@ impl<'a> TreeView<'a> {
     pub(crate) fn draw(&mut self, ui: &mut egui::Ui) {
         let (id, rect) = ui.allocate_space(ui.available_size());
 
-        let drag_response = ui.interact(rect, id, egui::Sense::click_and_drag());
+        let pointer_response = ui.interact(rect, id, egui::Sense::click_and_drag());
 
-        if drag_response.dragged() {
-            self.transform.translation += drag_response.drag_delta();
+        if pointer_response.dragged() {
+            self.transform.translation += pointer_response.drag_delta();
         }
-        if drag_response.double_clicked() {
+        if pointer_response.double_clicked() {
             self.transform = TSTransform::default();
+        }
+
+        // let transform =
+        // TSTransform::from_translation(ui.min_rect().left_top().to_vec2()) *
+        // self.transform;
+
+        if let Some(pointer) = ui.ctx().input(|i| i.pointer.hover_pos()) {
+            if pointer_response.hovered() {
+                let pointer_in_layer = self.transform.inverse() * pointer;
+                let zoom_delta = ui.ctx().input(|i| i.zoom_delta());
+                let pan_delta = ui.ctx().input(|i| i.smooth_scroll_delta);
+
+                // // Zoom in on pointer:
+                self.transform = self.transform
+                    * TSTransform::from_translation(pointer_in_layer.to_vec2())
+                    * TSTransform::from_scaling(zoom_delta)
+                    * TSTransform::from_translation(-pointer_in_layer.to_vec2());
+
+                // Pan:
+                self.transform = TSTransform::from_translation(pan_delta) * self.transform;
+            }
         }
 
         self.root_subtree

@@ -92,17 +92,22 @@ impl<'a> SubtreeView<'a> {
                         //     if menu.button("Fetch all").clicked() {
                         //         let _ = self
                         //             .sender
-                        //             .blocking_send(Message::FetchWithPathQuery {
+                        //             
+                        // .blocking_send(Message::FetchWithPathQuery {
                         //                 path_query: PathQuery {
-                        //                     path: subtree_ctx.path().to_vec(),
+                        //                     path:
+                        // subtree_ctx.path().to_vec(),
                         //                     query: SizedQuery {
                         //                         query: Query {
-                        //                             items: vec![QueryItem::RangeFull],
-                        //                             default_subquery_branch: SubqueryBranch {
-                        //                                 subquery_path: None,
+                        //                             items:
+                        // vec![QueryItem::RangeFull],
+                        //                             default_subquery_branch:
+                        // SubqueryBranch {             
+                        // subquery_path: None,
                         //                                 subquery: None,
                         //                             },
-                        //                             conditional_subquery_branches: Vec::new(),
+                        //                             
+                        // conditional_subquery_branches: Vec::new(),
                         //                             left_to_right: true,
                         //                         },
                         //                         limit: None,
@@ -110,23 +115,29 @@ impl<'a> SubtreeView<'a> {
                         //                     },
                         //                 },
                         //             })
-                        //             .inspect_err(|_| log::error!("Can't reach data fetching thread"));
+                        //             .inspect_err(|_| log::error!("Can't reach
+                        // data fetching thread"));
                         //     }
 
                         //     if menu.button("Fetch first 100").clicked() {
                         //         let _ = self
                         //             .sender
-                        //             .blocking_send(Message::FetchWithPathQuery {
+                        //             
+                        // .blocking_send(Message::FetchWithPathQuery {
                         //                 path_query: PathQuery {
-                        //                     path: subtree_ctx.path().to_vec(),
+                        //                     path:
+                        // subtree_ctx.path().to_vec(),
                         //                     query: SizedQuery {
                         //                         query: Query {
-                        //                             items: vec![QueryItem::RangeFull],
-                        //                             default_subquery_branch: SubqueryBranch {
-                        //                                 subquery_path: None,
+                        //                             items:
+                        // vec![QueryItem::RangeFull],
+                        //                             default_subquery_branch:
+                        // SubqueryBranch {             
+                        // subquery_path: None,
                         //                                 subquery: None,
                         //                             },
-                        //                             conditional_subquery_branches: Vec::new(),
+                        //                             
+                        // conditional_subquery_branches: Vec::new(),
                         //                             left_to_right: true,
                         //                         },
                         //                         limit: Some(100),
@@ -135,7 +146,8 @@ impl<'a> SubtreeView<'a> {
                         //                 },
                         //             })
                         //             .inspect_err(|_| {
-                        //                 log::error!("Can't reach data fetching thread");
+                        //                 log::error!("Can't reach data
+                        // fetching thread");
                         //             });
                         //     }
 
@@ -144,11 +156,13 @@ impl<'a> SubtreeView<'a> {
                         //             let _ = self
                         //                 .sender
                         //                 .blocking_send(Message::FetchNode {
-                        //                     path: subtree_ctx.path().to_vec(),
+                        //                     path:
+                        // subtree_ctx.path().to_vec(),
                         //                     key: key.clone(),
                         //                     show: false,
                         //                 })
-                        //                 .inspect_err(|_| log::error!("Can't reach data fetching thread"));
+                        //                 .inspect_err(|_| log::error!("Can't
+                        // reach data fetching thread"));
                         //         }
                         //     }
 
@@ -158,16 +172,19 @@ impl<'a> SubtreeView<'a> {
                         //             .blocking_send(Message::UnloadSubtree {
                         //                 path: subtree_ctx.path().to_vec(),
                         //             })
-                        //             .inspect_err(|_| log::error!("Can't reach data fetching thread"));
+                        //             .inspect_err(|_| log::error!("Can't reach
+                        // data fetching thread"));
                         //         subtree_ctx.subtree().first_page();
                         //     }
                         // });
 
-                        // ui.allocate_ui(egui::Vec2 { x: CELL_X, y: 10.0 }, |ui| ui.separator());
+                        // ui.allocate_ui(egui::Vec2 { x: CELL_X, y: 10.0 },
+                        // |ui| ui.separator());
 
                         // path_label(ui, subtree_ctx.path());
 
-                        // ui.allocate_ui(egui::Vec2 { x: CELL_X, y: 10.0 }, |ui| ui.separator());
+                        // ui.allocate_ui(egui::Vec2 { x: CELL_X, y: 10.0 },
+                        // |ui| ui.separator());
 
                         // for node_ctx in subtree_ctx
                         //     .iter_nodes()
@@ -181,7 +198,8 @@ impl<'a> SubtreeView<'a> {
                         //     } = &node_ctx.node().element
                         //     {
                         //         if subtree_ctx.path() != *ref_path {
-                        //             let point = subtree.get_subtree_output_point();
+                        //             let point =
+                        // subtree.get_subtree_output_point();
                         //             let key = ref_key.clone();
                         //             let path: Path<'c> = *ref_path;
                         //             self.references.push((point, path, key));
@@ -190,20 +208,22 @@ impl<'a> SubtreeView<'a> {
 
                         //     draw_element(ui, &mut self.transform, &node_ctx);
 
-                        //     ui.allocate_ui(egui::Vec2 { x: CELL_X, y: 10.0 }, |ui| ui.separator());
-                        // }
+                        //     ui.allocate_ui(egui::Vec2 { x: CELL_X, y: 10.0 },
+                        // |ui| ui.separator()); }
 
                         // if subtree.nodes.len() > KV_PER_PAGE {
                         //     ui.horizontal(|pagination| {
                         //         if pagination
-                        //             .add_enabled(subtree.page_idx() > 0, egui::Button::new("⬅"))
+                        //             .add_enabled(subtree.page_idx() > 0,
+                        // egui::Button::new("⬅"))
                         //             .clicked()
                         //         {
                         //             subtree.prev_page();
                         //         }
                         //         if pagination
                         //             .add_enabled(
-                        //                 (subtree.page_idx() + 1) * KV_PER_PAGE < subtree.n_nodes(),
+                        //                 (subtree.page_idx() + 1) *
+                        // KV_PER_PAGE < subtree.n_nodes(),
                         //                 egui::Button::new("➡"),
                         //             )
                         //             .clicked()
@@ -217,6 +237,6 @@ impl<'a> SubtreeView<'a> {
             .response
             .layer_id;
 
-        ui.ctx().transform_layer_shapes(area_id, *tree_view_ctx.transform);
+        ui.ctx().set_transform_layer(area_id, *tree_view_ctx.transform);
     }
 }

@@ -12,6 +12,11 @@ pub async fn start_grovedbg_protocol(
 ) {
     let client = Client::new();
 
+    log::info!(
+        "Starting background fetch process, GroveDBG backend address is {}",
+        address
+    );
+
     while let Some(cmd) = commands_receiver.recv().await {
         let updates = match process_command(&address, &client, cmd).await {
             Ok(x) => x,
@@ -63,7 +68,7 @@ async fn process_command(
         Command::FetchRoot => {
             log::info!("Fetch GroveDB root node");
             if let Some(root_node) = client
-                .post(format!("{address}/fetch_root_node"))
+                .post(format!("{address}fetch_root_node"))
                 .json(&RootFetchRequest)
                 .send()
                 .and_then(|response| response.json::<Option<NodeUpdate>>())
@@ -78,7 +83,7 @@ async fn process_command(
         Command::FetchNode { path, key } => {
             log::info!("Fetching a node...");
             if let Some(node_update) = client
-                .post(format!("{address}/fetch_node"))
+                .post(format!("{address}fetch_node"))
                 .json(&NodeFetchRequest {
                     path: path.clone(),
                     key: key.clone(),
@@ -94,14 +99,14 @@ async fn process_command(
             }
         }
         Command::ProvePathQuery { path_query } => Ok(client
-            .post(format!("{address}/prove_path_query"))
+            .post(format!("{address}prove_path_query"))
             .json(&path_query)
             .send()
             .and_then(|response| response.json::<grovedbg_types::Proof>())
             .await?
             .into()),
         Command::FetchWithPathQuery { path_query } => Ok(client
-            .post(format!("{address}/fetch_with_path_query"))
+            .post(format!("{address}fetch_with_path_query"))
             .json(&path_query)
             .send()
             .and_then(|response| response.json::<Vec<grovedbg_types::NodeUpdate>>())
