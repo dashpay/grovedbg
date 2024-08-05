@@ -1,10 +1,9 @@
 use eframe::egui::{self, Color32, Label, Layout, RichText, Vec2};
 use grovedbg_types::Element;
 
-use super::SubtreeViewContext;
+use super::{SubtreeViewContext, NODE_WIDTH};
 use crate::bytes_utils::{binary_label, binary_label_colored, BytesDisplayVariant};
 
-const ELEMENT_WIDTH: f32 = 300.;
 const ELEMENT_HEIGHT: f32 = 20.;
 
 /// Same as `Element` of `grovedbg-types` except with an addition of
@@ -109,7 +108,7 @@ impl ElementView {
         // Draw value
         let layout = Layout::top_down(egui::Align::Min);
         ui.allocate_ui_with_layout(
-            Vec2::new(ELEMENT_WIDTH, ELEMENT_HEIGHT),
+            Vec2::new(NODE_WIDTH, ELEMENT_HEIGHT),
             layout,
             |value_ui: &mut egui::Ui| {
                 match &self.value {
@@ -203,3 +202,7 @@ fn element_to_color(element: &WrappedElement) -> Color32 {
         WrappedElement::Element(_) => Color32::DARK_BLUE,
     }
 }
+
+// pub(super) fn separator(ui: &mut egui::Ui) {
+//     ui.allocate_ui(egui::Vec2 { x: CELL_X, y: 10.0 }, |ui| ui.separator());
+// }

@@ -34,12 +34,12 @@ pub fn start_grovedbg_app(
     let path_ctx = Box::leak(Box::new(PathCtx::new()));
 
     Box::new(GroveDbgApp {
+        tree_view: TreeView::new(commands_sender.clone(), path_ctx),
         commands_sender,
         updates_receiver,
         path_ctx,
         query_builder: QueryBuilder::new(),
         proof_viewer: None,
-        tree_view: TreeView::new(path_ctx),
     })
 }
 

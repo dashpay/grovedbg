@@ -6,8 +6,13 @@ use eframe::{
     emath::TSTransform,
 };
 
-use self::subtree_view::SubtreeView;
-use crate::path_ctx::{Path, PathCtx};
+use crate::{
+    path_ctx::{Path, PathCtx},
+    CommandsSender,
+};
+use subtree_view::SubtreeView;
+
+const NODE_WIDTH: f32 = 300.;
 
 pub(crate) struct TreeView<'a> {
     transform: TSTransform,
@@ -16,10 +21,10 @@ pub(crate) struct TreeView<'a> {
 }
 
 impl<'a> TreeView<'a> {
-    pub(crate) fn new(path_ctx: &'a PathCtx) -> Self {
+    pub(crate) fn new(commands_sender: CommandsSender, path_ctx: &'a PathCtx) -> Self {
         Self {
             transform: TSTransform::default(),
-            root_subtree: SubtreeView::new(path_ctx.get_root()),
+            root_subtree: SubtreeView::new(commands_sender, path_ctx.get_root()),
             path_ctx,
         }
     }

@@ -44,7 +44,7 @@ fn main() {
         native_options,
         Box::new(|cc| {
             let style = Style {
-                visuals: Visuals::dark(),
+                visuals: Visuals::light(),
                 ..Style::default()
             };
             cc.egui_ctx.set_style(style);
@@ -88,7 +88,7 @@ fn main() {
                 web_options,
                 Box::new(|cc| {
                     let style = Style {
-                        visuals: Visuals::dark(),
+                        visuals: Visuals::light(),
                         ..Style::default()
                     };
                     cc.egui_ctx.set_style(style);
