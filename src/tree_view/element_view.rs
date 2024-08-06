@@ -1,5 +1,5 @@
-use eframe::egui::{self, Color32, Label, Layout, RichText, Vec2};
-use grovedbg_types::Element;
+use eframe::egui::{self, Color32, Context, Label, Layout, RichText, Vec2};
+use grovedbg_types::{CryptoHash, Element};
 
 use super::{SubtreeViewContext, NODE_WIDTH};
 use crate::bytes_utils::{binary_label, binary_label_colored, BytesDisplayVariant};
@@ -27,8 +27,8 @@ impl WrappedElement {
 pub(crate) struct ElementView {
     key: Vec<u8>,
     value: WrappedElement,
-    kv_digest_hash: Option<Vec<u8>>,
-    value_hash: Option<Vec<u8>>,
+    kv_digest_hash: Option<CryptoHash>,
+    value_hash: Option<CryptoHash>,
     key_display: BytesDisplayVariant,
     value_display: BytesDisplayVariant,
     flags_display: BytesDisplayVariant,
@@ -42,8 +42,8 @@ impl ElementView {
     pub(crate) fn new(
         key: Vec<u8>,
         value: WrappedElement,
-        kv_digest_hash: Option<Vec<u8>>,
-        value_hash: Option<Vec<u8>>,
+        kv_digest_hash: Option<CryptoHash>,
+        value_hash: Option<CryptoHash>,
     ) -> Self {
         let key_display = BytesDisplayVariant::guess(&key);
         let value_display = if let WrappedElement::Element(Element::Item { value, .. }) = &value {
@@ -67,6 +67,7 @@ impl ElementView {
     }
 
     pub(crate) fn draw(&mut self, ui: &mut egui::Ui, subtree_view_context: &mut SubtreeViewContext) {
+        let ctx: Context = ui.ctx().clone();
         // Draw key
         ui.horizontal(|key_line| {
             if key_line.button("#").clicked() {
@@ -83,7 +84,8 @@ impl ElementView {
 
                 if let Some(alias) = path.get_profiles_alias() {
                     key_line.add(
-                        Label::new(RichText::new(alias).color(element_to_color(&self.value))).truncate(),
+                        Label::new(RichText::new(alias).color(element_to_color(&ctx, &self.value)))
+                            .truncate(),
                     );
                 } else {
                     let display_variant_old = path.get_display_variant().expect(
@@ -95,13 +97,20 @@ impl ElementView {
                         key_line,
                         &self.key,
                         &mut display_variant,
-                        element_to_color(&self.value),
+                        element_to_color(&ctx, &self.value),
                     );
 
                     if display_variant != display_variant_old {
                         path.update_display_variant(display_variant);
                     }
                 }
+            } else {
+                binary_label_colored(
+                    key_line,
+                    &self.key,
+                    &mut self.key_display,
+                    element_to_color(&ctx, &self.value),
+                );
             }
         });
 
@@ -174,35 +183,42 @@ impl ElementView {
                     _ => todo!(), // references
                 };
                 if self.show_hashes {
-                    if let Some(kv_digest_hash) = &self.kv_digest_hash {
-                        value_ui.horizontal(|line| {
+                    value_ui.horizontal(|line| {
+                        if let Some(hash) = &self.kv_digest_hash {
                             line.label("KV digest hash:");
-                            binary_label(line, &kv_digest_hash, &mut self.kv_digest_hash_display);
-                        });
-                    }
-                    if let Some(value_hash) = &self.value_hash {
-                        value_ui.horizontal(|line| {
+                            binary_label(line, hash, &mut self.kv_digest_hash_display);
+                        }
+                    });
+                    value_ui.horizontal(|line| {
+                        if let Some(hash) = &self.value_hash {
                             line.label("Value hash:");
-                            binary_label(line, &value_hash, &mut self.value_hash_display);
-                        });
-                    }
+                            binary_label(line, hash, &mut self.value_hash_display);
+                        }
+                    });
                 }
             },
         );
     }
 }
 
-fn element_to_color(element: &WrappedElement) -> Color32 {
-    match element {
-        WrappedElement::SubtreePlaceholder => Color32::DARK_RED,
-        WrappedElement::Element(Element::Item { .. }) => Color32::GRAY,
-        WrappedElement::Element(Element::SumItem { .. }) => Color32::DARK_GREEN,
-        WrappedElement::Element(Element::Subtree { .. }) => Color32::GOLD,
-        WrappedElement::Element(Element::Sumtree { .. }) => Color32::GREEN,
-        WrappedElement::Element(_) => Color32::DARK_BLUE,
+fn element_to_color(ctx: &Context, element: &WrappedElement) -> Color32 {
+    if ctx.style().visuals.dark_mode {
+        match element {
+            WrappedElement::SubtreePlaceholder => Color32::DARK_RED,
+            WrappedElement::Element(Element::Item { .. }) => Color32::GRAY,
+            WrappedElement::Element(Element::SumItem { .. }) => Color32::DARK_GREEN,
+            WrappedElement::Element(Element::Subtree { .. }) => Color32::GOLD,
+            WrappedElement::Element(Element::Sumtree { .. }) => Color32::GREEN,
+            WrappedElement::Element(_) => Color32::DARK_BLUE,
+        }
+    } else {
+        match element {
+            WrappedElement::SubtreePlaceholder => Color32::DARK_RED,
+            WrappedElement::Element(Element::Item { .. }) => Color32::GRAY,
+            WrappedElement::Element(Element::SumItem { .. }) => Color32::DARK_GREEN,
+            WrappedElement::Element(Element::Subtree { .. }) => Color32::from_rgb(200, 150, 0),
+            WrappedElement::Element(Element::Sumtree { .. }) => Color32::from_rgb(0, 150, 0),
+            WrappedElement::Element(_) => Color32::DARK_BLUE,
+        }
     }
 }
-
-// pub(super) fn separator(ui: &mut egui::Ui) {
-//     ui.allocate_ui(egui::Vec2 { x: CELL_X, y: 10.0 }, |ui| ui.separator());
-// }

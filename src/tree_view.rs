@@ -5,7 +5,8 @@ use eframe::{
     egui::{self, Rect},
     emath::TSTransform,
 };
-use subtree_view::SubtreeView;
+use grovedbg_types::NodeUpdate;
+use subtree_view::{RoutingNodeUpdate, SubtreeView};
 
 use crate::{
     path_ctx::{Path, PathCtx},
@@ -24,9 +25,20 @@ impl<'a> TreeView<'a> {
     pub(crate) fn new(commands_sender: CommandsSender, path_ctx: &'a PathCtx) -> Self {
         Self {
             transform: TSTransform::default(),
-            root_subtree: SubtreeView::new(commands_sender, path_ctx.get_root()),
+            root_subtree: SubtreeView::new(commands_sender, path_ctx.get_root(), None),
             path_ctx,
         }
+    }
+
+    pub(crate) fn apply_node_update(&mut self, node_update: NodeUpdate) {
+        self.root_subtree
+            .apply_node_update(RoutingNodeUpdate::new(node_update));
+    }
+
+    pub(crate) fn apply_root_node_update(&mut self, node_update: NodeUpdate) {
+        self.root_subtree.set_root(node_update.key.clone());
+        self.root_subtree
+            .apply_node_update(RoutingNodeUpdate::new(node_update));
     }
 
     pub(crate) fn draw(&mut self, ui: &mut egui::Ui) {

@@ -1,32 +1,110 @@
-use eframe::egui::{self, Align2, Color32, Order, Stroke};
-use grovedbg_types::{PathQuery, Query, QueryItem, SizedQuery, SubqueryBranch};
+use std::collections::BTreeMap;
 
-use super::{TreeViewContext, NODE_WIDTH};
+use eframe::egui::{self, Align2, Color32, Order, Stroke};
+use grovedbg_types::{Element, Key, NodeUpdate, PathQuery, Query, QueryItem, SizedQuery, SubqueryBranch};
+
+use super::{
+    element_view::{ElementView, WrappedElement},
+    SubtreeViewContext, TreeViewContext, NODE_WIDTH,
+};
 use crate::{path_ctx::Path, protocol::Command, CommandsSender};
+
+const KV_PER_PAGE: usize = 10;
 
 pub(crate) struct SubtreeView<'a> {
     path: Path<'a>,
     commands_sender: CommandsSender,
     root_key: Option<Vec<u8>>,
-    children: Vec<SubtreeView<'a>>,
+    subtrees_children: BTreeMap<Key, SubtreeView<'a>>,
+    elements_children: BTreeMap<Key, ElementView>,
+    page_index: usize,
+    width: f32,
 }
 
-impl<'a> SubtreeView<'a> {
-    pub(crate) fn new(commands_sender: CommandsSender, path: Path<'a>) -> Self {
+/// `NodeUpdate` wrapper to navigate an update inside of a nested subtree
+/// structure
+pub(super) struct RoutingNodeUpdate {
+    update: NodeUpdate,
+    processed_segments: usize,
+}
+
+impl RoutingNodeUpdate {
+    pub(super) fn new(update: NodeUpdate) -> Self {
         Self {
-            path,
-            commands_sender,
-            root_key: None,
-            children: Vec::new(),
+            update,
+            processed_segments: 0,
         }
     }
 
-    pub(crate) fn new_with_root(commands_sender: CommandsSender, path: Path<'a>, root_key: Vec<u8>) -> Self {
+    fn is_subtree_reached(&self) -> bool {
+        self.processed_segments == self.update.path.len()
+    }
+}
+
+impl<'a> SubtreeView<'a> {
+    pub(crate) fn new(commands_sender: CommandsSender, path: Path<'a>, root_key: Option<Vec<u8>>) -> Self {
         Self {
             path,
             commands_sender,
-            root_key: Some(root_key),
-            children: Vec::new(),
+            root_key,
+            subtrees_children: BTreeMap::new(),
+            elements_children: BTreeMap::new(),
+            page_index: 0,
+            width: NODE_WIDTH,
+        }
+    }
+
+    pub(crate) fn set_root(&mut self, root_key: Vec<u8>) {
+        self.root_key = Some(root_key);
+    }
+
+    pub(crate) fn apply_node_update(&mut self, mut node_update: RoutingNodeUpdate) {
+        if node_update.is_subtree_reached() {
+            let update = node_update.update;
+
+            if let Element::Subtree { root_key, .. } | Element::Sumtree { root_key, .. } = &update.element {
+                self.subtrees_children.insert(
+                    update.key.clone(),
+                    SubtreeView::new(
+                        self.commands_sender.clone(),
+                        self.path.child(update.key.clone()),
+                        root_key.clone(),
+                    ),
+                );
+            }
+
+            self.elements_children.insert(
+                update.key.clone(),
+                ElementView::new(
+                    update.key,
+                    WrappedElement::Element(update.element),
+                    Some(update.kv_digest_hash),
+                    Some(update.value_hash),
+                ),
+            );
+        } else {
+            let subtree_key = node_update.update.path[node_update.processed_segments].clone();
+            let subtree = self
+                .subtrees_children
+                .entry(subtree_key.clone())
+                .or_insert_with(|| {
+                    self.elements_children.insert(
+                        subtree_key.clone(),
+                        ElementView::new(
+                            subtree_key.clone(),
+                            WrappedElement::SubtreePlaceholder,
+                            None,
+                            None,
+                        ),
+                    );
+                    SubtreeView::new(
+                        self.commands_sender.clone(),
+                        (&self.path).child(subtree_key),
+                        None,
+                    )
+                });
+            node_update.processed_segments += 1;
+            subtree.apply_node_update(node_update);
         }
     }
 
@@ -72,12 +150,20 @@ impl<'a> SubtreeView<'a> {
             .inspect_err(|_| log::error!("Unable to reach GroveDBG protocol thread"));
     }
 
-    pub(crate) fn draw(&mut self, tree_view_ctx: TreeViewContext, ui: &mut egui::Ui) {
+    fn next_page(&mut self) {
+        self.page_index += 1;
+    }
+
+    fn prev_page(&mut self) {
+        self.page_index = self.page_index.saturating_sub(1);
+    }
+
+    pub(crate) fn draw(&mut self, tree_view_context: TreeViewContext, ui: &mut egui::Ui) {
         let area_id = egui::Area::new(self.path.id())
             .order(Order::Background)
             .anchor(Align2::CENTER_CENTER, (0., 0.))
             .show(ui.ctx(), |area| {
-                area.set_clip_rect(tree_view_ctx.transform.inverse() * tree_view_ctx.rect);
+                area.set_clip_rect(tree_view_context.transform.inverse() * tree_view_context.rect);
 
                 egui::Frame::default()
                     .rounding(egui::Rounding::same(4.0))
@@ -118,92 +204,48 @@ impl<'a> SubtreeView<'a> {
 
                         subtree_ui.separator();
 
-                        //     if let Some(key) = &subtree.root_node {
-                        //         if menu.button("Fetch root").clicked() {
-                        //             let _ = self
-                        //                 .sender
-                        //                 .blocking_send(Message::FetchNode {
-                        //                     path:
-                        // subtree_ctx.path().to_vec(),
-                        //                     key: key.clone(),
-                        //                     show: false,
-                        //                 })
-                        //                 .inspect_err(|_| log::error!("Can't
-                        // reach data fetching thread"));
-                        //         }
-                        //     }
+                        for (_, element) in self
+                            .elements_children
+                            .iter_mut()
+                            .skip(self.page_index * KV_PER_PAGE)
+                            .take(KV_PER_PAGE)
+                        {
+                            element.draw(
+                                subtree_ui,
+                                &mut SubtreeViewContext {
+                                    tree_view_context,
+                                    path: self.path,
+                                },
+                            );
 
-                        //     if menu.button("Unload").clicked() {
-                        //         let _ = self
-                        //             .sender
-                        //             .blocking_send(Message::UnloadSubtree {
-                        //                 path: subtree_ctx.path().to_vec(),
-                        //             })
-                        //             .inspect_err(|_| log::error!("Can't reach
-                        // data fetching thread"));
-                        //         subtree_ctx.subtree().first_page();
-                        //     }
-                        // });
+                            subtree_ui.separator();
+                        }
 
-                        // ui.allocate_ui(egui::Vec2 { x: CELL_X, y: 10.0 },
-                        // |ui| ui.separator());
-
-                        // path_label(ui, subtree_ctx.path());
-
-                        // ui.allocate_ui(egui::Vec2 { x: CELL_X, y: 10.0 },
-                        // |ui| ui.separator());
-
-                        // for node_ctx in subtree_ctx
-                        //     .iter_nodes()
-                        //     .skip(subtree.page_idx() * KV_PER_PAGE)
-                        //     .take(KV_PER_PAGE)
-                        // {
-                        //     if let Element::Reference {
-                        //         path: ref_path,
-                        //         key: ref_key,
-                        //         ..
-                        //     } = &node_ctx.node().element
-                        //     {
-                        //         if subtree_ctx.path() != *ref_path {
-                        //             let point =
-                        // subtree.get_subtree_output_point();
-                        //             let key = ref_key.clone();
-                        //             let path: Path<'c> = *ref_path;
-                        //             self.references.push((point, path, key));
-                        //         }
-                        //     }
-
-                        //     draw_element(ui, &mut self.transform, &node_ctx);
-
-                        //     ui.allocate_ui(egui::Vec2 { x: CELL_X, y: 10.0 },
-                        // |ui| ui.separator()); }
-
-                        // if subtree.nodes.len() > KV_PER_PAGE {
-                        //     ui.horizontal(|pagination| {
-                        //         if pagination
-                        //             .add_enabled(subtree.page_idx() > 0,
-                        // egui::Button::new("⬅"))
-                        //             .clicked()
-                        //         {
-                        //             subtree.prev_page();
-                        //         }
-                        //         if pagination
-                        //             .add_enabled(
-                        //                 (subtree.page_idx() + 1) *
-                        // KV_PER_PAGE < subtree.n_nodes(),
-                        //                 egui::Button::new("➡"),
-                        //             )
-                        //             .clicked()
-                        //         {
-                        //             subtree.next_page();
-                        //         }
-                        //     });
-                        // }
+                        if self.elements_children.len() > KV_PER_PAGE {
+                            subtree_ui.horizontal(|pagination| {
+                                if pagination
+                                    .add_enabled(self.page_index > 0, egui::Button::new("⬅"))
+                                    .clicked()
+                                {
+                                    self.prev_page();
+                                }
+                                if pagination
+                                    .add_enabled(
+                                        (self.page_index + 1) * KV_PER_PAGE < self.elements_children.len(),
+                                        egui::Button::new("➡"),
+                                    )
+                                    .clicked()
+                                {
+                                    self.next_page();
+                                }
+                            });
+                        }
                     })
             })
             .response
             .layer_id;
 
-        ui.ctx().set_transform_layer(area_id, *tree_view_ctx.transform);
+        ui.ctx()
+            .set_transform_layer(area_id, *tree_view_context.transform);
     }
 }

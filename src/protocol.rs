@@ -43,6 +43,7 @@ pub enum Command {
 
 /// Updates and commands' results pushed to GroveDBG application
 pub enum GroveGdbUpdate {
+    RootUpdate(Option<NodeUpdate>),
     Node(Vec<NodeUpdate>),
     Proof(Proof),
 }
@@ -74,10 +75,10 @@ async fn process_command(
                 .and_then(|response| response.json::<Option<NodeUpdate>>())
                 .await?
             {
-                Ok(vec![root_node].into())
+                Ok(GroveGdbUpdate::RootUpdate(Some(root_node)))
             } else {
                 log::warn!("No root node returned, GroveDB is empty");
-                Ok(Vec::new().into())
+                Ok(GroveGdbUpdate::RootUpdate(None))
             }
         }
         Command::FetchNode { path, key } => {
@@ -98,19 +99,32 @@ async fn process_command(
                 Ok(Vec::new().into())
             }
         }
-        Command::ProvePathQuery { path_query } => Ok(client
-            .post(format!("{address}prove_path_query"))
-            .json(&path_query)
-            .send()
-            .and_then(|response| response.json::<grovedbg_types::Proof>())
-            .await?
-            .into()),
-        Command::FetchWithPathQuery { path_query } => Ok(client
-            .post(format!("{address}fetch_with_path_query"))
-            .json(&path_query)
-            .send()
-            .and_then(|response| response.json::<Vec<grovedbg_types::NodeUpdate>>())
-            .await?
-            .into()),
+        Command::ProvePathQuery { path_query } => {
+            log::info!("Requesting a proof for a path query...");
+            Ok(client
+                .post(format!("{address}prove_path_query"))
+                .json(&path_query)
+                .send()
+                .and_then(|response| response.json::<grovedbg_types::Proof>())
+                .await?
+                .into())
+        }
+        Command::FetchWithPathQuery { path_query } => {
+            log::info!(
+                "Fetching {} nodes of a subtree with a path query...",
+                path_query
+                    .query
+                    .limit
+                    .map(|n| n.to_string())
+                    .unwrap_or_else(|| "all".to_owned())
+            );
+            Ok(client
+                .post(format!("{address}fetch_with_path_query"))
+                .json(&path_query)
+                .send()
+                .and_then(|response| response.json::<Vec<grovedbg_types::NodeUpdate>>())
+                .await?
+                .into())
+        }
     }
 }

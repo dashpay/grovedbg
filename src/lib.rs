@@ -37,6 +37,10 @@ pub fn start_grovedbg_app(
 
     let path_ctx = Box::leak(Box::new(PathCtx::new()));
 
+    let _ = commands_sender
+        .blocking_send(Command::FetchRoot)
+        .inspect_err(|_| log::error!("Unable to reach GroveDBG protocol thread"));
+
     Box::new(GroveDbgApp {
         tree_view: TreeView::new(commands_sender.clone(), path_ctx),
         commands_sender,
@@ -69,7 +73,28 @@ impl App for GroveDbgApp {
             ui.add_space(PANEL_MARGIN);
         });
 
-        // TODO: process updates
+        while !self.updates_receiver.is_empty() {
+            if let Some(update) = self.updates_receiver.blocking_recv() {
+                match update {
+                    GroveGdbUpdate::Node(node_updates) => {
+                        for update in node_updates.into_iter() {
+                            self.tree_view.apply_node_update(update);
+                        }
+                    }
+                    GroveGdbUpdate::Proof(proof) => {
+                        self.proof_viewer = Some(ProofViewer::new(proof));
+                    }
+                    GroveGdbUpdate::RootUpdate(Some(root_update)) => {
+                        self.tree_view.apply_root_node_update(root_update);
+                    }
+                    GroveGdbUpdate::RootUpdate(None) => {
+                        log::warn!("Received no root node: GroveDB is empty");
+                    }
+                }
+            } else {
+                log::error!("Protocol thread was terminated, can't receive updates anymore");
+            }
+        }
 
         egui::SidePanel::right("log").show(ctx, |ui| {
             egui::Frame::default()
