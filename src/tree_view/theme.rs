@@ -3,7 +3,7 @@ use grovedbg_types::Element;
 
 use super::element_view::WrappedElement;
 
-const SUBTREE_COLOR_LIGHT: Color32 = Color32::from_rgb(200, 150, 0);
+const SUBTREE_COLOR_LIGHT: Color32 = Color32::from_rgb(180, 120, 0);
 const SUBTREE_COLOR_DARK: Color32 = Color32::GOLD;
 
 pub(crate) fn element_to_color(ctx: &Context, element: &WrappedElement) -> Color32 {

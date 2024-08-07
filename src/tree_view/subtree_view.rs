@@ -8,7 +8,11 @@ use super::{
     theme::subtree_line_color,
     SubtreeViewContext, TreeViewContext, NODE_WIDTH,
 };
-use crate::{path_ctx::Path, protocol::Command, CommandsSender};
+use crate::{
+    path_ctx::{path_label, Path},
+    protocol::Command,
+    CommandsSender,
+};
 
 const KV_PER_PAGE: usize = 10;
 const NODE_MARGIN_HORIZONTAL: f32 = 50.;
@@ -221,6 +225,11 @@ impl<'a> SubtreeView<'a> {
                                 }
                             }
                         });
+
+                        subtree_ui.separator();
+
+                        // Subtree path area
+                        path_label(subtree_ui, self.path);
 
                         subtree_ui.separator();
 
