@@ -76,9 +76,10 @@ impl ElementView {
             if self.value.is_tree() {
                 if let Some(subtree_visible) = subtree_view_context.subtree_visibility_mut(&self.key) {
                     key_line.checkbox(subtree_visible, "");
-                    if key_line.button("🔎").clicked() {
-                        *subtree_visible = true;
-                        subtree_view_context.focus_child(self.key.clone());
+                    if *subtree_visible {
+                        if key_line.button("🔎").clicked() {
+                            subtree_view_context.focus_child(self.key.clone());
+                        }
                     }
                 }
 

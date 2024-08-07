@@ -171,9 +171,101 @@ impl<'a> SubtreeView<'a> {
         self.page_index = self.page_index.saturating_sub(1);
     }
 
-    pub(crate) fn draw<'t>(
-        &'t mut self,
-        tree_view_context: TreeViewContext<'a, 't>,
+    /// Draw subtree control buttons
+    fn draw_controls(&self, ui: &mut egui::Ui) {
+        ui.horizontal(|controls_ui| {
+            if controls_ui.button("10").clicked() {
+                self.fetch_n(10);
+            }
+
+            if controls_ui.button("100").clicked() {
+                self.fetch_n(100);
+            }
+
+            if controls_ui
+                .button(egui_phosphor::variants::regular::DATABASE)
+                .clicked()
+            {
+                self.fetch_all();
+            }
+
+            if let Some(key) = self.root_key.as_ref() {
+                if controls_ui
+                    .button(egui_phosphor::variants::regular::ANCHOR)
+                    .clicked()
+                {
+                    self.fetch_key(key.clone());
+                }
+            }
+        });
+    }
+
+    /// Draw elements of the subtree as a list
+    fn draw_elements<'t, 'tc>(&mut self, ui: &mut egui::Ui, tree_view_context: &'tc mut TreeViewContext<'t>) {
+        for (_, element) in self
+            .elements_children
+            .iter_mut()
+            .skip(self.page_index * KV_PER_PAGE)
+            .take(KV_PER_PAGE)
+        {
+            element.draw(
+                ui,
+                &mut SubtreeViewContext {
+                    tree_view_context,
+                    path: self.path,
+                    subtrees: &mut self.subtrees_children,
+                },
+            );
+
+            ui.separator();
+        }
+    }
+
+    /// Draw pagination buttons
+    fn draw_pagination(&mut self, ui: &mut egui::Ui) {
+        if self.elements_children.len() > KV_PER_PAGE {
+            ui.horizontal(|pagination| {
+                if pagination
+                    .add_enabled(self.page_index > 0, egui::Button::new("⬅"))
+                    .clicked()
+                {
+                    self.prev_page();
+                }
+                if pagination
+                    .add_enabled(
+                        (self.page_index + 1) * KV_PER_PAGE < self.elements_children.len(),
+                        egui::Button::new("➡"),
+                    )
+                    .clicked()
+                {
+                    self.next_page();
+                }
+            });
+        }
+    }
+
+    /// Draw a line to the parent if any
+    fn draw_parent_connection(&self, ui: &mut egui::Ui, coords: Pos2) {
+        if let Some(parent_path) = self.path.parent() {
+            if let Some(parent_pos) =
+                ui.memory(|mem| mem.area_rect(parent_path.id()).map(|rect| rect.center_bottom()))
+            {
+                let painter = ui.painter();
+                painter.line_segment(
+                    [parent_pos, coords + (NODE_WIDTH / 2., 0.).into()],
+                    Stroke {
+                        width: 1.0,
+                        color: subtree_line_color(ui.ctx()),
+                    },
+                );
+            }
+        }
+    }
+
+    /// Draw a subtree list view
+    pub(crate) fn draw<'t, 'tc>(
+        &mut self,
+        tree_view_context: &'tc mut TreeViewContext<'t>,
         ui: &mut egui::Ui,
         coords: Option<Pos2>,
     ) {
@@ -199,92 +291,18 @@ impl<'a> SubtreeView<'a> {
                     .show(area, |subtree_ui| {
                         subtree_ui.allocate_space((NODE_WIDTH, 0.).into());
 
-                        // Control buttons area
-                        subtree_ui.horizontal(|controls_ui| {
-                            if controls_ui.button("10").clicked() {
-                                self.fetch_n(10);
-                            }
-
-                            if controls_ui.button("100").clicked() {
-                                self.fetch_n(100);
-                            }
-
-                            if controls_ui
-                                .button(egui_phosphor::variants::regular::DATABASE)
-                                .clicked()
-                            {
-                                self.fetch_all();
-                            }
-
-                            if let Some(key) = self.root_key.as_ref() {
-                                if controls_ui
-                                    .button(egui_phosphor::variants::regular::ANCHOR)
-                                    .clicked()
-                                {
-                                    self.fetch_key(key.clone());
-                                }
-                            }
-                        });
-
+                        self.draw_controls(subtree_ui);
                         subtree_ui.separator();
 
-                        // Subtree path area
                         path_label(subtree_ui, self.path);
-
                         subtree_ui.separator();
 
-                        for (_, element) in self
-                            .elements_children
-                            .iter_mut()
-                            .skip(self.page_index * KV_PER_PAGE)
-                            .take(KV_PER_PAGE)
-                        {
-                            element.draw(
-                                subtree_ui,
-                                &mut SubtreeViewContext {
-                                    tree_view_context,
-                                    path: self.path,
-                                    subtrees: &mut self.subtrees_children,
-                                },
-                            );
+                        self.draw_elements(subtree_ui, tree_view_context);
 
-                            subtree_ui.separator();
-                        }
+                        self.draw_pagination(subtree_ui);
 
-                        if self.elements_children.len() > KV_PER_PAGE {
-                            subtree_ui.horizontal(|pagination| {
-                                if pagination
-                                    .add_enabled(self.page_index > 0, egui::Button::new("⬅"))
-                                    .clicked()
-                                {
-                                    self.prev_page();
-                                }
-                                if pagination
-                                    .add_enabled(
-                                        (self.page_index + 1) * KV_PER_PAGE < self.elements_children.len(),
-                                        egui::Button::new("➡"),
-                                    )
-                                    .clicked()
-                                {
-                                    self.next_page();
-                                }
-                            });
-                        }
-
-                        // Connect to parent
-                        if let (Some(parent_path), Some(self_pos)) = (self.path.parent(), coords) {
-                            if let Some(parent_pos) = ui.memory(|mem| {
-                                mem.area_rect(parent_path.id()).map(|rect| rect.center_bottom())
-                            }) {
-                                let painter = subtree_ui.painter();
-                                painter.line_segment(
-                                    [parent_pos, self_pos + (NODE_WIDTH / 2., 0.).into()],
-                                    Stroke {
-                                        width: 1.0,
-                                        color: subtree_line_color(subtree_ui.ctx()),
-                                    },
-                                );
-                            }
+                        if let Some(self_pos) = coords {
+                            self.draw_parent_connection(subtree_ui, self_pos);
                         }
                     })
             })

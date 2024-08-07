@@ -132,6 +132,13 @@ impl Ord for Path<'_> {
 }
 
 impl<'c> Path<'c> {
+    pub fn get_root(&self) -> Path {
+        Path {
+            head_slab_id: None,
+            ctx: self.ctx,
+        }
+    }
+
     pub fn get_profiles_alias(&self) -> Option<String> {
         self.for_last_segment(|s| s.profiles_alias.clone()).flatten()
     }

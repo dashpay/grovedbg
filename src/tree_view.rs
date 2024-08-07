@@ -5,7 +5,7 @@ mod theme;
 use std::collections::BTreeMap;
 
 use eframe::{
-    egui::{self, Rect},
+    egui::{self, Context, Rect},
     emath::TSTransform,
 };
 use grovedbg_types::{Key, NodeUpdate};
@@ -20,7 +20,6 @@ const NODE_WIDTH: f32 = 300.;
 
 pub(crate) struct TreeView<'a> {
     transform: TSTransform,
-    path_ctx: &'a PathCtx,
     root_subtree: SubtreeView<'a>,
 }
 
@@ -32,7 +31,6 @@ impl<'a> TreeView<'a> {
         Self {
             transform: TSTransform::default(),
             root_subtree,
-            path_ctx,
         }
     }
 
@@ -59,10 +57,6 @@ impl<'a> TreeView<'a> {
             self.transform = TSTransform::default();
         }
 
-        // let transform =
-        // TSTransform::from_translation(ui.min_rect().left_top().to_vec2()) *
-        // self.transform;
-
         if let Some(pointer) = ui.ctx().input(|i| i.pointer.hover_pos()) {
             if pointer_response.hovered() {
                 let pointer_in_layer = self.transform.inverse() * pointer;
@@ -80,66 +74,52 @@ impl<'a> TreeView<'a> {
             }
         }
 
-        self.root_subtree.draw(
-            TreeViewContext::new(self.path_ctx, &self.transform, rect),
-            ui,
-            None,
-        );
+        let mut tree_view_context = TreeViewContext::new(ui.ctx().clone(), &mut self.transform, rect);
+        self.root_subtree.draw(&mut tree_view_context, ui, None);
     }
 }
 
-#[derive(Clone, Copy)]
-pub(crate) struct TreeViewContext<'a, 't> {
-    path_ctx: &'a PathCtx,
-    transform: &'t TSTransform,
+pub(crate) struct TreeViewContext<'t> {
+    transform: &'t mut TSTransform,
     rect: Rect,
+    context: Context,
 }
 
-impl<'a, 't> TreeViewContext<'a, 't> {
-    pub(crate) fn new(path_ctx: &'a PathCtx, transform: &'t TSTransform, rect: Rect) -> Self {
+impl<'t> TreeViewContext<'t> {
+    pub(crate) fn new(context: Context, transform: &'t mut TSTransform, rect: Rect) -> Self {
         Self {
-            path_ctx,
             transform,
             rect,
+            context,
         }
     }
 
-    // pub(crate) fn root_context(&self) -> SubtreeViewContext<'a> {
-    //     SubtreeViewContext {
-    //         tree_view_context: *self,
-    //         path: self.path_ctx.get_root(),
-    //     }
-    // }
+    pub(crate) fn focus<'a>(&mut self, path: Path<'a>) {
+        let self_pos = self
+            .context
+            .memory(|mem| mem.area_rect(path.id()).map(|rect| rect.center()));
+        let root_pos = self
+            .context
+            .memory(|mem| mem.area_rect(path.get_root().id()).map(|rect| rect.center()));
 
-    pub(crate) fn focus(&mut self, path: Path<'a>) {
-        todo!()
-        //* transform = TSTransform::from_translation(
-        //     node_ctx
-        //         .child_subtree_ctx()
-        //         .map(|ctx| ctx.subtree().get_subtree_input_point())
-        //         .flatten()
-        //         .map(|point| point.to_vec2() + Vec2::new(-1500., -900.))
-        //         .unwrap_or_default(),
-        // )
-        // .inverse();
+        if let (Some(self_pos), Some(root_pos)) = (self_pos, root_pos) {
+            *self.transform =
+                TSTransform::from_translation(self_pos.to_vec2() - root_pos.to_vec2()).inverse();
+        }
     }
 }
 
-pub(crate) struct SubtreeViewContext<'a, 't, 'b> {
-    tree_view_context: TreeViewContext<'a, 't>,
+pub(crate) struct SubtreeViewContext<'a, 't, 'b, 'tc> {
+    tree_view_context: &'tc mut TreeViewContext<'t>,
     path: Path<'a>,
     subtrees: &'b mut BTreeMap<Key, SubtreeView<'a>>,
 }
 
-impl<'a, 't, 'b> SubtreeViewContext<'a, 't, 'b> {
-    // pub(crate) fn child(&self, key: Vec<u8>) -> SubtreeViewContext<'a, 'b> {
-    //     SubtreeViewContext {
-    //         tree_view_context: self.tree_view_context,
-    //         path: self.path.child(key),
-    //     }
-    // }
-
-    pub(crate) fn focus_child(&self, key: Vec<u8>) {}
+impl<'a, 't, 'b, 'tc> SubtreeViewContext<'a, 't, 'b, 'tc> {
+    pub(crate) fn focus_child(&mut self, key: Vec<u8>) {
+        let child_path = self.path.child(key);
+        self.tree_view_context.focus(child_path);
+    }
 
     pub(crate) fn path(&self) -> Path<'a> {
         self.path
