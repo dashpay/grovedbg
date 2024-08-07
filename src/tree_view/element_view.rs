@@ -1,7 +1,7 @@
 use eframe::egui::{self, Color32, Context, Label, Layout, RichText, Vec2};
 use grovedbg_types::{CryptoHash, Element};
 
-use super::{SubtreeViewContext, NODE_WIDTH};
+use super::{theme::element_to_color, SubtreeViewContext, NODE_WIDTH};
 use crate::bytes_utils::{binary_label, binary_label_colored, BytesDisplayVariant};
 
 const ELEMENT_HEIGHT: f32 = 20.;
@@ -35,7 +35,7 @@ pub(crate) struct ElementView {
     kv_digest_hash_display: BytesDisplayVariant,
     value_hash_display: BytesDisplayVariant,
     show_hashes: bool,
-    subtree_visible: bool,
+    // subtree_visible: bool,
 }
 
 impl ElementView {
@@ -62,7 +62,7 @@ impl ElementView {
             kv_digest_hash_display: BytesDisplayVariant::Hex,
             value_hash_display: BytesDisplayVariant::Hex,
             show_hashes: false,
-            subtree_visible: false,
+            // subtree_visible: false,
         }
     }
 
@@ -74,10 +74,12 @@ impl ElementView {
                 self.show_hashes = !self.show_hashes;
             }
             if self.value.is_tree() {
-                key_line.checkbox(&mut self.subtree_visible, "");
-                if key_line.button("🔎").clicked() {
-                    self.subtree_visible = true;
-                    subtree_view_context.focus_child(self.key.clone());
+                if let Some(subtree_visible) = subtree_view_context.subtree_visibility_mut(&self.key) {
+                    key_line.checkbox(subtree_visible, "");
+                    if key_line.button("🔎").clicked() {
+                        *subtree_visible = true;
+                        subtree_view_context.focus_child(self.key.clone());
+                    }
                 }
 
                 let path = subtree_view_context.path().child(self.key.clone());
@@ -198,27 +200,5 @@ impl ElementView {
                 }
             },
         );
-    }
-}
-
-fn element_to_color(ctx: &Context, element: &WrappedElement) -> Color32 {
-    if ctx.style().visuals.dark_mode {
-        match element {
-            WrappedElement::SubtreePlaceholder => Color32::DARK_RED,
-            WrappedElement::Element(Element::Item { .. }) => Color32::GRAY,
-            WrappedElement::Element(Element::SumItem { .. }) => Color32::DARK_GREEN,
-            WrappedElement::Element(Element::Subtree { .. }) => Color32::GOLD,
-            WrappedElement::Element(Element::Sumtree { .. }) => Color32::GREEN,
-            WrappedElement::Element(_) => Color32::DARK_BLUE,
-        }
-    } else {
-        match element {
-            WrappedElement::SubtreePlaceholder => Color32::DARK_RED,
-            WrappedElement::Element(Element::Item { .. }) => Color32::GRAY,
-            WrappedElement::Element(Element::SumItem { .. }) => Color32::DARK_GREEN,
-            WrappedElement::Element(Element::Subtree { .. }) => Color32::from_rgb(200, 150, 0),
-            WrappedElement::Element(Element::Sumtree { .. }) => Color32::from_rgb(0, 150, 0),
-            WrappedElement::Element(_) => Color32::DARK_BLUE,
-        }
     }
 }

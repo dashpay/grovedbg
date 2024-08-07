@@ -1,15 +1,18 @@
 use std::collections::BTreeMap;
 
-use eframe::egui::{self, Align2, Color32, Order, Stroke};
+use eframe::egui::{self, Align2, Color32, Order, Pos2, Stroke};
 use grovedbg_types::{Element, Key, NodeUpdate, PathQuery, Query, QueryItem, SizedQuery, SubqueryBranch};
 
 use super::{
     element_view::{ElementView, WrappedElement},
+    theme::subtree_line_color,
     SubtreeViewContext, TreeViewContext, NODE_WIDTH,
 };
 use crate::{path_ctx::Path, protocol::Command, CommandsSender};
 
 const KV_PER_PAGE: usize = 10;
+const NODE_MARGIN_HORIZONTAL: f32 = 50.;
+const NODE_MARGIN_VERTICAL: f32 = 400.;
 
 pub(crate) struct SubtreeView<'a> {
     path: Path<'a>,
@@ -18,7 +21,8 @@ pub(crate) struct SubtreeView<'a> {
     subtrees_children: BTreeMap<Key, SubtreeView<'a>>,
     elements_children: BTreeMap<Key, ElementView>,
     page_index: usize,
-    width: f32,
+    width: usize,
+    pub(super) show: bool,
 }
 
 /// `NodeUpdate` wrapper to navigate an update inside of a nested subtree
@@ -50,7 +54,8 @@ impl<'a> SubtreeView<'a> {
             subtrees_children: BTreeMap::new(),
             elements_children: BTreeMap::new(),
             page_index: 0,
-            width: NODE_WIDTH,
+            width: 1,
+            show: false,
         }
     }
 
@@ -63,14 +68,18 @@ impl<'a> SubtreeView<'a> {
             let update = node_update.update;
 
             if let Element::Subtree { root_key, .. } | Element::Sumtree { root_key, .. } = &update.element {
-                self.subtrees_children.insert(
-                    update.key.clone(),
-                    SubtreeView::new(
-                        self.commands_sender.clone(),
-                        self.path.child(update.key.clone()),
-                        root_key.clone(),
-                    ),
-                );
+                self.subtrees_children
+                    .entry(update.key.clone())
+                    .and_modify(|sv| {
+                        sv.root_key = root_key.clone();
+                    })
+                    .or_insert_with(|| {
+                        SubtreeView::new(
+                            self.commands_sender.clone(),
+                            self.path.child(update.key.clone()),
+                            root_key.clone(),
+                        )
+                    });
             }
 
             self.elements_children.insert(
@@ -158,10 +167,21 @@ impl<'a> SubtreeView<'a> {
         self.page_index = self.page_index.saturating_sub(1);
     }
 
-    pub(crate) fn draw(&mut self, tree_view_context: TreeViewContext, ui: &mut egui::Ui) {
-        let area_id = egui::Area::new(self.path.id())
-            .order(Order::Background)
-            .anchor(Align2::CENTER_CENTER, (0., 0.))
+    pub(crate) fn draw<'t>(
+        &'t mut self,
+        tree_view_context: TreeViewContext<'a, 't>,
+        ui: &mut egui::Ui,
+        coords: Option<Pos2>,
+    ) {
+        let mut area_builder = egui::Area::new(self.path.id()).order(Order::Background);
+        area_builder = if let Some(coords) = coords {
+            area_builder.fixed_pos(coords)
+        } else {
+            area_builder.anchor(Align2::CENTER_CENTER, (0., 0.))
+        };
+
+        let area_id = area_builder
+            .constrain(false)
             .show(ui.ctx(), |area| {
                 area.set_clip_rect(tree_view_context.transform.inverse() * tree_view_context.rect);
 
@@ -215,6 +235,7 @@ impl<'a> SubtreeView<'a> {
                                 &mut SubtreeViewContext {
                                     tree_view_context,
                                     path: self.path,
+                                    subtrees: &mut self.subtrees_children,
                                 },
                             );
 
@@ -240,6 +261,22 @@ impl<'a> SubtreeView<'a> {
                                 }
                             });
                         }
+
+                        // Connect to parent
+                        if let (Some(parent_path), Some(self_pos)) = (self.path.parent(), coords) {
+                            if let Some(parent_pos) = ui.memory(|mem| {
+                                mem.area_rect(parent_path.id()).map(|rect| rect.center_bottom())
+                            }) {
+                                let painter = subtree_ui.painter();
+                                painter.line_segment(
+                                    [parent_pos, self_pos + (NODE_WIDTH / 2., 0.).into()],
+                                    Stroke {
+                                        width: 1.0,
+                                        color: subtree_line_color(subtree_ui.ctx()),
+                                    },
+                                );
+                            }
+                        }
                     })
             })
             .response
@@ -247,5 +284,38 @@ impl<'a> SubtreeView<'a> {
 
         ui.ctx()
             .set_transform_layer(area_id, *tree_view_context.transform);
+
+        if let Some(bottom_pos) =
+            ui.memory(|mem| mem.area_rect(self.path.id()).map(|rect| rect.center_bottom()))
+        {
+            let width: usize = std::cmp::max(
+                self.subtrees_children
+                    .iter()
+                    .filter(|(_, s)| s.show)
+                    .map(|(_, s)| s.width)
+                    .sum(),
+                1,
+            );
+            self.width = width;
+            let width_f = width_to_egui(width);
+
+            let mut current_x = bottom_pos.x - width_f / 2. - NODE_WIDTH / 2.;
+            let y = bottom_pos.y + NODE_MARGIN_VERTICAL;
+
+            for (_, subtree) in self.subtrees_children.iter_mut().filter(|(_, s)| s.show) {
+                let subtree_width = width_to_egui(subtree.width);
+                current_x += subtree_width / 2.;
+                subtree.draw(tree_view_context, ui, Some((current_x, y).into()));
+                current_x += subtree_width / 2. + NODE_MARGIN_HORIZONTAL;
+            }
+        }
+    }
+}
+
+fn width_to_egui(width: usize) -> f32 {
+    if width > 0 {
+        width as f32 * NODE_WIDTH + (width - 1) as f32 * NODE_MARGIN_HORIZONTAL
+    } else {
+        0.
     }
 }

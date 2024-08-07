@@ -167,13 +167,17 @@ fn bytes_as_varint(bytes: &[u8]) -> String {
 }
 
 pub(crate) fn bytes_by_display_variant(bytes: &[u8], display_variant: &BytesDisplayVariant) -> String {
-    match display_variant {
-        BytesDisplayVariant::U8 => bytes_as_slice(bytes),
-        BytesDisplayVariant::String => format!("str: {}", String::from_utf8_lossy(bytes).to_string()),
-        BytesDisplayVariant::Hex => format!("hex: {}", bytes_as_hex(bytes)),
-        BytesDisplayVariant::SignedInt => bytes_as_signed_int(bytes),
-        BytesDisplayVariant::UnsignedInt => bytes_as_unsigned_int(bytes),
-        BytesDisplayVariant::VarInt => format!("varint: {}", bytes_as_varint(bytes)),
+    if bytes.is_empty() {
+        "empty".to_owned()
+    } else {
+        match display_variant {
+            BytesDisplayVariant::U8 => bytes_as_slice(bytes),
+            BytesDisplayVariant::String => format!("str: {}", String::from_utf8_lossy(bytes).to_string()),
+            BytesDisplayVariant::Hex => format!("hex: {}", bytes_as_hex(bytes)),
+            BytesDisplayVariant::SignedInt => bytes_as_signed_int(bytes),
+            BytesDisplayVariant::UnsignedInt => bytes_as_unsigned_int(bytes),
+            BytesDisplayVariant::VarInt => format!("varint: {}", bytes_as_varint(bytes)),
+        }
     }
 }
 

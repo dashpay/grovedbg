@@ -133,6 +133,6 @@ impl App for GroveDbgApp {
             self.tree_view.draw(ui);
         });
 
-        ctx.request_repaint_after(Duration::from_secs(5));
+        ctx.request_repaint_after(Duration::from_secs(1));
     }
 }
