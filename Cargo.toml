@@ -22,6 +22,8 @@ strum = { version = "0.26.3", features = ["strum_macros", "derive"] }
 tokio = { version = "1.39.2", default-features = false, features = ["sync"] }
 egui-phosphor = "0.6.0"
 thiserror = "1.0.63"
+bincode = { version = "2.0.0-rc.3", features = ["derive"] } 
+base64 = "0.22.1"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen-futures = "0.4.42"
