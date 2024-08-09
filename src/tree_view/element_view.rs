@@ -35,7 +35,6 @@ pub(crate) struct ElementView {
     kv_digest_hash_display: BytesDisplayVariant,
     value_hash_display: BytesDisplayVariant,
     show_hashes: bool,
-    // subtree_visible: bool,
 }
 
 impl ElementView {
@@ -62,7 +61,6 @@ impl ElementView {
             kv_digest_hash_display: BytesDisplayVariant::Hex,
             value_hash_display: BytesDisplayVariant::Hex,
             show_hashes: false,
-            // subtree_visible: false,
         }
     }
 

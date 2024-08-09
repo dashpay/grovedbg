@@ -11,7 +11,10 @@ mod tree_view;
 
 use std::time::Duration;
 
-use eframe::{egui, App, CreationContext};
+use eframe::{
+    egui::{self, Style, Visuals},
+    App, CreationContext, Storage,
+};
 use path_ctx::PathCtx;
 use proof_viewer::ProofViewer;
 pub use protocol::start_grovedbg_protocol;
@@ -21,6 +24,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use tree_view::TreeView;
 
 const PANEL_MARGIN: f32 = 5.;
+const DARK_THEME_KEY: &'static str = "dark_theme";
 
 type CommandsSender = Sender<Command>;
 type UpdatesReceiver = Receiver<GroveGdbUpdate>;
@@ -35,20 +39,33 @@ pub fn start_grovedbg_app(
     egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
     cc.egui_ctx.set_fonts(fonts);
 
+    let dark_theme = cc
+        .storage
+        .and_then(|s| s.get_string(DARK_THEME_KEY))
+        .and_then(|param| param.parse::<bool>().ok())
+        .unwrap_or_default();
+
+    if dark_theme {
+        let style = Style {
+            visuals: Visuals::dark(),
+            ..Style::default()
+        };
+        cc.egui_ctx.set_style(style);
+    }
+
     let path_ctx = Box::leak(Box::new(PathCtx::new()));
 
     let _ = commands_sender
         .blocking_send(Command::FetchRoot)
         .inspect_err(|_| log::error!("Unable to reach GroveDBG protocol thread"));
 
-    Box::new(GroveDbgApp {
-        tree_view: TreeView::new(commands_sender.clone(), path_ctx),
+    Box::new(GroveDbgApp::new(
+        cc.storage,
         commands_sender,
         updates_receiver,
         path_ctx,
-        query_builder: QueryBuilder::new(),
-        proof_viewer: None,
-    })
+        dark_theme,
+    ))
 }
 
 struct GroveDbgApp {
@@ -58,9 +75,63 @@ struct GroveDbgApp {
     query_builder: QueryBuilder,
     proof_viewer: Option<ProofViewer>,
     tree_view: TreeView<'static>,
+    show_query_builder: bool,
+    show_proof_viewer: bool,
+    show_profiles: bool,
+    dark_theme: bool,
+}
+
+const SHOW_QUERY_BUILDER_KEY: &'static str = "show_query_builder";
+const SHOW_PROOF_VIEWER_KEY: &'static str = "show_proof_viewer";
+const SHOW_PROFILES_KEY: &'static str = "show_profiles";
+
+impl GroveDbgApp {
+    fn new(
+        storage: Option<&dyn Storage>,
+        commands_sender: CommandsSender,
+        updates_receiver: UpdatesReceiver,
+        path_ctx: &'static PathCtx,
+        dark_theme: bool,
+    ) -> Self {
+        GroveDbgApp {
+            tree_view: TreeView::new(commands_sender.clone(), path_ctx),
+            commands_sender,
+            updates_receiver,
+            path_ctx,
+            query_builder: QueryBuilder::new(),
+            proof_viewer: None,
+            show_query_builder: storage
+                .and_then(|s| s.get_string(SHOW_QUERY_BUILDER_KEY))
+                .map(|param| param.parse::<bool>().ok())
+                .flatten()
+                .unwrap_or(true),
+            show_proof_viewer: storage
+                .and_then(|s| s.get_string(SHOW_PROOF_VIEWER_KEY))
+                .map(|param| param.parse::<bool>().ok())
+                .flatten()
+                .unwrap_or(true),
+            show_profiles: storage
+                .and_then(|s| s.get_string(SHOW_PROFILES_KEY))
+                .map(|param| param.parse::<bool>().ok())
+                .flatten()
+                .unwrap_or(true),
+            dark_theme,
+        }
+    }
 }
 
 impl App for GroveDbgApp {
+    fn save(&mut self, storage: &mut dyn Storage) {
+        storage.set_string(SHOW_QUERY_BUILDER_KEY, self.show_query_builder.to_string());
+        storage.set_string(SHOW_PROOF_VIEWER_KEY, self.show_proof_viewer.to_string());
+        storage.set_string(SHOW_PROFILES_KEY, self.show_profiles.to_string());
+        storage.set_string(DARK_THEME_KEY, self.dark_theme.to_string());
+    }
+
+    fn auto_save_interval(&self) -> Duration {
+        Duration::from_secs(5)
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("GroveDBG").show(ctx, |ui| {
             ui.horizontal(|line| {
@@ -104,35 +175,95 @@ impl App for GroveDbgApp {
                 });
         });
 
-        egui::SidePanel::left("query_builder").show(ctx, |ui| {
-            ui.label("Query builder");
-            ui.separator();
-            egui::Frame::default()
-                .outer_margin(PANEL_MARGIN)
-                .show(ui, |frame| {
-                    self.query_builder
-                        .draw(frame, &self.path_ctx, &self.commands_sender);
-                });
-        });
+        egui::SidePanel::left("profiles")
+            .default_width(10.)
+            .show(ctx, |ui| {
+                if self.show_profiles {
+                    ui.horizontal(|line| {
+                        if line
+                            .button(egui_phosphor::variants::regular::ARROW_FAT_LINES_LEFT)
+                            .clicked()
+                        {
+                            self.show_profiles = false;
+                        }
+                        line.label("Profiles");
+                    });
+                    ui.separator();
+                    egui::Frame::default()
+                        .outer_margin(PANEL_MARGIN)
+                        .show(ui, |frame| {
+                            // TODO profiles
+                        });
+                } else {
+                    if ui.button(egui_phosphor::variants::regular::BANK).clicked() {
+                        self.show_profiles = true;
+                    }
+                }
+            });
+
+        egui::SidePanel::left("query_builder")
+            .default_width(10.)
+            .show(ctx, |ui| {
+                if self.show_query_builder {
+                    ui.horizontal(|line| {
+                        if line
+                            .button(egui_phosphor::variants::regular::ARROW_FAT_LINES_LEFT)
+                            .clicked()
+                        {
+                            self.show_query_builder = false;
+                        }
+                        line.label("Query builder");
+                    });
+                    ui.separator();
+                    egui::Frame::default()
+                        .outer_margin(PANEL_MARGIN)
+                        .show(ui, |frame| {
+                            self.query_builder
+                                .draw(frame, &self.path_ctx, &self.commands_sender);
+                        });
+                } else {
+                    if ui
+                        .button(egui_phosphor::variants::regular::LIST_MAGNIFYING_GLASS)
+                        .clicked()
+                    {
+                        self.show_query_builder = true;
+                    }
+                }
+            });
 
         egui::SidePanel::left("proof_viewer").show(ctx, |ui| {
-            ui.label("Proof viewer");
-            ui.separator();
-            egui::Frame::default()
-                .outer_margin(PANEL_MARGIN)
-                .show(ui, |frame| {
-                    if let Some(proof_viewer) = &mut self.proof_viewer {
-                        proof_viewer.draw(frame);
-                    } else {
-                        frame.label("No proof to show yet");
+            if self.show_proof_viewer {
+                ui.horizontal(|line| {
+                    if line
+                        .button(egui_phosphor::variants::regular::ARROW_FAT_LINES_LEFT)
+                        .clicked()
+                    {
+                        self.show_proof_viewer = false;
                     }
+                    line.label("Proof viewer");
                 });
+                ui.separator();
+                egui::Frame::default()
+                    .outer_margin(PANEL_MARGIN)
+                    .show(ui, |frame| {
+                        if let Some(proof_viewer) = &mut self.proof_viewer {
+                            proof_viewer.draw(frame);
+                        } else {
+                            frame.label("No proof to show yet");
+                        }
+                    });
+            } else {
+                if ui.button(egui_phosphor::variants::regular::LOCK_KEY).clicked() {
+                    self.show_proof_viewer = true;
+                }
+            }
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             self.tree_view.draw(ui);
         });
 
+        self.dark_theme = ctx.style().visuals.dark_mode;
         ctx.request_repaint_after(Duration::from_secs(1));
     }
 }

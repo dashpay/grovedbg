@@ -1,4 +1,3 @@
-use eframe::egui::{Style, Visuals};
 use tokio::sync::mpsc::channel;
 
 // Desktop application version
@@ -43,11 +42,6 @@ fn main() {
         "GroveDBG",
         native_options,
         Box::new(|cc| {
-            let style = Style {
-                visuals: Visuals::light(),
-                ..Style::default()
-            };
-            cc.egui_ctx.set_style(style);
             Ok(grovedbg::start_grovedbg_app(
                 cc,
                 commands_sender,
@@ -87,11 +81,6 @@ fn main() {
                 "the_canvas_id",
                 web_options,
                 Box::new(|cc| {
-                    let style = Style {
-                        visuals: Visuals::light(),
-                        ..Style::default()
-                    };
-                    cc.egui_ctx.set_style(style);
                     Ok(grovedbg::start_grovedbg_app(
                         cc,
                         commands_sender,

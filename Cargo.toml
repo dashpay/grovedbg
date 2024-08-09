@@ -8,10 +8,10 @@ license = "MIT"
 repository = "https://github.com/dashpay/grovedbg"
 
 [dependencies]
-eframe = "0.28.1"
+eframe = { version = "0.28.1", features = ["persistence"] }
 egui_logger = { git = "https://github.com/fominok/egui_logger", branch = "light-theme-colors" }
 futures = "0.3.30"
-grovedbg-types = "1.0.0"
+grovedbg-types = { path = "../grovedb/grovedbg-types", version = "1.0.0" }
 hex = "0.4.3"
 integer-encoding = "4.0.0"
 log = "0.4.22"
