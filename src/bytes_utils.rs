@@ -36,6 +36,12 @@ impl BytesDisplayVariant {
             _ => Self::String,
         }
     }
+
+    pub(crate) fn draw(&mut self, ui: &mut egui::Ui) {
+        for variant in Self::iter() {
+            ui.radio_value(self, variant, variant.as_ref());
+        }
+    }
 }
 
 #[derive(Debug, AsRefStr, EnumIter, Clone, Copy, PartialEq)]
@@ -62,6 +68,14 @@ pub(crate) enum BytesInputVariant {
     U64,
 }
 
+impl BytesInputVariant {
+    fn draw(&mut self, ui: &mut egui::Ui) {
+        for variant in Self::iter() {
+            ui.radio_value(self, variant, variant.as_ref());
+        }
+    }
+}
+
 pub(crate) struct BytesView {
     pub(crate) bytes: Vec<u8>,
     display_variant: BytesDisplayVariant,
@@ -80,9 +94,10 @@ impl BytesView {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct BytesInput {
     input: String,
-    display_variant: BytesInputVariant,
+    input_variant: BytesInputVariant,
     err: bool,
 }
 
@@ -110,15 +125,24 @@ impl BytesInput {
     pub(crate) fn new() -> Self {
         Self {
             input: String::new(),
-            display_variant: BytesInputVariant::U8,
+            input_variant: BytesInputVariant::U8,
             err: false,
         }
     }
 
     pub(crate) fn new_from_bytes(bytes: Vec<u8>) -> Self {
+        let mut input = String::new();
+        let mut bytes_iter = bytes.iter();
+        let last = bytes_iter.next_back();
+        for b in bytes_iter {
+            write!(&mut input, "{b} ").ok();
+        }
+        if let Some(b) = last {
+            write!(&mut input, "{b}").ok();
+        }
         BytesInput {
-            input: bytes_as_slice(&bytes),
-            display_variant: BytesInputVariant::U8,
+            input,
+            input_variant: BytesInputVariant::U8,
             err: false,
         }
     }
@@ -127,8 +151,8 @@ impl BytesInput {
         ui.add(
             TextEdit::singleline(&mut self.input)
                 .text_color_opt(self.err.then_some(input_error_color(ui.ctx()))),
-        );
-        ui.text_edit_singleline(&mut self.input);
+        )
+        .context_menu(|menu| self.input_variant.draw(menu));
     }
 
     fn get_bytes_ignore_error(&self) -> Option<Vec<u8>> {
@@ -136,7 +160,7 @@ impl BytesInput {
             return None;
         }
 
-        match self.display_variant {
+        match self.input_variant {
             BytesInputVariant::U8 => self
                 .input
                 .split_whitespace()
