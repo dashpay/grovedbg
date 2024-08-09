@@ -2,10 +2,7 @@ use std::collections::BTreeMap;
 
 use base64::prelude::*;
 use bincode::{Decode, Encode};
-use eframe::{
-    egui::{self, TextBuffer},
-    Storage,
-};
+use eframe::{egui, Storage};
 
 use crate::PROFILES_KEY;
 
@@ -13,11 +10,16 @@ use crate::PROFILES_KEY;
 const DRIVE: &'static str = "drive";
 
 #[derive(Encode, Decode)]
-pub(crate) struct Profile {}
+struct Profile {
+    entries: Vec<ProfileEntry>,
+}
+
+#[derive(Encode, Decode)]
+struct ProfileEntry {}
 
 fn default_profiles() -> BTreeMap<String, Profile> {
     let mut profiles = BTreeMap::new();
-    profiles.insert(DRIVE.to_owned(), Profile {});
+    profiles.insert(DRIVE.to_owned(), Profile { entries: vec![] });
 
     profiles
 }
@@ -54,10 +56,14 @@ impl ProfilesView {
     }
 
     pub(crate) fn draw(&mut self, ui: &mut egui::Ui) {
-        for (key, profile) in self.profiles.iter_mut() {
+        for (key, _) in self.profiles.iter() {
             if ui.radio(self.selected.as_str() == key.as_str(), key).clicked() {
                 self.selected = key.to_owned();
             };
         }
+
+        ui.separator();
+
+        let mut profile = self.profiles.get_mut(&self.selected);
     }
 }

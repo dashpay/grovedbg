@@ -3,6 +3,7 @@
 #![deny(missing_docs)]
 
 mod bytes_utils;
+mod help;
 mod path_ctx;
 mod profiles;
 mod proof_viewer;
@@ -12,7 +13,6 @@ mod tree_view;
 
 use std::time::Duration;
 
-use base64::prelude::*;
 use eframe::{
     egui::{self, Context, Style, Visuals},
     App, CreationContext, Storage,
@@ -83,6 +83,7 @@ struct GroveDbgApp {
     show_profiles: bool,
     dark_theme: bool,
     profiles_view: ProfilesView,
+    show_help: bool,
 }
 
 const SHOW_QUERY_BUILDER_KEY: &'static str = "show_query_builder";
@@ -119,6 +120,7 @@ impl GroveDbgApp {
                 .unwrap_or(true),
             dark_theme,
             profiles_view: ProfilesView::restore(storage),
+            show_help: false,
         }
     }
 
@@ -233,6 +235,9 @@ impl App for GroveDbgApp {
         egui::TopBottomPanel::top("GroveDBG").show(ctx, |ui| {
             ui.horizontal(|line| {
                 egui::widgets::global_dark_light_mode_buttons(line);
+                if line.button("Help").clicked() {
+                    self.show_help = !self.show_help;
+                }
                 if !self.updates_receiver.is_empty() {
                     line.label("Processing updates...");
                     line.spinner();
@@ -278,6 +283,12 @@ impl App for GroveDbgApp {
         self.draw_query_builder_panel(ctx);
 
         self.draw_proof_viewer_panel(ctx);
+
+        if self.show_help {
+            egui::Window::new("Help")
+                .open(&mut self.show_help)
+                .show(ctx, help::show_help);
+        }
 
         egui::CentralPanel::default().show(ctx, |ui| {
             self.tree_view.draw(ui);
