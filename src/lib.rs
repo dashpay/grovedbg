@@ -9,6 +9,7 @@ mod profiles;
 mod proof_viewer;
 mod protocol;
 mod query_builder;
+mod theme;
 mod tree_view;
 
 use std::time::Duration;

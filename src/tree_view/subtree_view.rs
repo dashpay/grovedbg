@@ -5,12 +5,12 @@ use grovedbg_types::{Element, Key, NodeUpdate, PathQuery, Query, QueryItem, Size
 
 use super::{
     element_view::{ElementView, WrappedElement},
-    theme::subtree_line_color,
     SubtreeViewContext, TreeViewContext, NODE_WIDTH,
 };
 use crate::{
     path_ctx::{path_label, Path},
     protocol::Command,
+    theme::subtree_line_color,
     CommandsSender,
 };
 
@@ -172,18 +172,23 @@ impl<'a> SubtreeView<'a> {
     }
 
     /// Draw subtree control buttons
-    fn draw_controls(&self, ui: &mut egui::Ui) {
+    fn draw_controls(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|controls_ui| {
-            if controls_ui.button("10").clicked() {
+            if controls_ui.button("10").on_hover_text("Fetch 10 items").clicked() {
                 self.fetch_n(10);
             }
 
-            if controls_ui.button("100").clicked() {
+            if controls_ui
+                .button("100")
+                .on_hover_text("Fetch 100 items")
+                .clicked()
+            {
                 self.fetch_n(100);
             }
 
             if controls_ui
                 .button(egui_phosphor::variants::regular::DATABASE)
+                .on_hover_text("Fetch whole subtree")
                 .clicked()
             {
                 self.fetch_all();
@@ -192,9 +197,21 @@ impl<'a> SubtreeView<'a> {
             if let Some(key) = self.root_key.as_ref() {
                 if controls_ui
                     .button(egui_phosphor::variants::regular::ANCHOR)
+                    .on_hover_text("Fetch root node data")
                     .clicked()
                 {
                     self.fetch_key(key.clone());
+                }
+            }
+
+            if !self.elements_children.is_empty() {
+                if controls_ui
+                    .button(egui_phosphor::variants::regular::BROOM)
+                    .on_hover_text("Clear subtree data")
+                    .clicked()
+                {
+                    self.subtrees_children.clear();
+                    self.elements_children.clear();
                 }
             }
         });

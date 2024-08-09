@@ -1,10 +1,13 @@
 use eframe::egui::{Color32, Context};
 use grovedbg_types::Element;
 
-use super::element_view::WrappedElement;
+use crate::tree_view::WrappedElement;
 
 const SUBTREE_COLOR_LIGHT: Color32 = Color32::from_rgb(180, 120, 0);
 const SUBTREE_COLOR_DARK: Color32 = Color32::GOLD;
+
+const ERROR_COLOR_DARK: Color32 = Color32::RED;
+const ERROR_COLOR_LIGHT: Color32 = Color32::DARK_RED;
 
 pub(crate) fn element_to_color(ctx: &Context, element: &WrappedElement) -> Color32 {
     if ctx.style().visuals.dark_mode {
@@ -33,5 +36,13 @@ pub(crate) fn subtree_line_color(ctx: &Context) -> Color32 {
         SUBTREE_COLOR_DARK
     } else {
         SUBTREE_COLOR_LIGHT
+    }
+}
+
+pub(crate) fn input_error_color(ctx: &Context) -> Color32 {
+    if ctx.style().visuals.dark_mode {
+        ERROR_COLOR_DARK
+    } else {
+        ERROR_COLOR_LIGHT
     }
 }

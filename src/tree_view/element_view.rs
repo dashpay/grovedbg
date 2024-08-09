@@ -1,8 +1,11 @@
-use eframe::egui::{self, Color32, Context, Label, Layout, RichText, Vec2};
+use eframe::egui::{self, Context, Label, Layout, RichText, Vec2};
 use grovedbg_types::{CryptoHash, Element};
 
-use super::{theme::element_to_color, SubtreeViewContext, NODE_WIDTH};
-use crate::bytes_utils::{binary_label, binary_label_colored, BytesDisplayVariant};
+use super::{SubtreeViewContext, NODE_WIDTH};
+use crate::{
+    bytes_utils::{binary_label, binary_label_colored, BytesDisplayVariant},
+    theme::element_to_color,
+};
 
 const ELEMENT_HEIGHT: f32 = 20.;
 

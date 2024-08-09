@@ -1,19 +1,29 @@
 use std::fmt::Write;
 
-use eframe::egui::{self, Color32, Label, RichText, Sense};
+use bincode::{BorrowDecode, Decode, Encode};
+use eframe::egui::{self, Color32, Label, RichText, Sense, TextEdit};
 use integer_encoding::VarInt;
+use strum::{AsRefStr, EnumIter, IntoEnumIterator};
+
+use crate::theme::input_error_color;
 
 const MAX_BYTES: usize = 10;
 const MAX_HEX_LENGTH: usize = 32;
 const HEX_PARTS_LENGTH: usize = 12;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, AsRefStr, EnumIter, Clone, Copy, PartialEq, Encode, Decode)]
 pub(crate) enum BytesDisplayVariant {
+    #[strum(serialize = "u8 array")]
     U8,
+    #[strum(serialize = "String")]
     String,
+    #[strum(serialize = "Hex")]
     Hex,
+    #[strum(serialize = "Signed integer")]
     SignedInt,
+    #[strum(serialize = "Unigned integer")]
     UnsignedInt,
+    #[strum(serialize = "Variable length integer")]
     VarInt,
 }
 
@@ -28,16 +38,27 @@ impl BytesDisplayVariant {
     }
 }
 
+#[derive(Debug, AsRefStr, EnumIter, Clone, Copy, PartialEq)]
 pub(crate) enum BytesInputVariant {
+    #[strum(serialize = "u8 array")]
     U8,
+    #[strum(serialize = "String")]
     String,
+    #[strum(serialize = "Hex")]
     Hex,
+    #[strum(serialize = "Variable length integer")]
     VarInt,
+    #[strum(serialize = "I16")]
     I16,
+    #[strum(serialize = "I32")]
     I32,
+    #[strum(serialize = "I64")]
     I64,
+    #[strum(serialize = "U16")]
     U16,
+    #[strum(serialize = "U32")]
     U32,
+    #[strum(serialize = "U64")]
     U64,
 }
 
@@ -56,6 +77,123 @@ impl BytesView {
 
     pub(crate) fn draw(&mut self, ui: &mut egui::Ui) {
         binary_label(ui, &self.bytes, &mut self.display_variant);
+    }
+}
+
+pub(crate) struct BytesInput {
+    input: String,
+    display_variant: BytesInputVariant,
+    err: bool,
+}
+
+impl Encode for BytesInput {
+    fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
+        self.get_bytes_ignore_error().encode(encoder)
+    }
+}
+
+impl Decode for BytesInput {
+    fn decode<D: bincode::de::Decoder>(decoder: &mut D) -> Result<Self, bincode::error::DecodeError> {
+        Ok(BytesInput::new_from_bytes(bincode::Decode::decode(decoder)?))
+    }
+}
+
+impl<'de> BorrowDecode<'de> for BytesInput {
+    fn borrow_decode<D: bincode::de::BorrowDecoder<'de>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        Ok(BytesInput::new_from_bytes(bincode::Decode::decode(decoder)?))
+    }
+}
+
+impl BytesInput {
+    pub(crate) fn new() -> Self {
+        Self {
+            input: String::new(),
+            display_variant: BytesInputVariant::U8,
+            err: false,
+        }
+    }
+
+    pub(crate) fn new_from_bytes(bytes: Vec<u8>) -> Self {
+        BytesInput {
+            input: bytes_as_slice(&bytes),
+            display_variant: BytesInputVariant::U8,
+            err: false,
+        }
+    }
+
+    pub(crate) fn draw(&mut self, ui: &mut egui::Ui) {
+        ui.add(
+            TextEdit::singleline(&mut self.input)
+                .text_color_opt(self.err.then_some(input_error_color(ui.ctx()))),
+        );
+        ui.text_edit_singleline(&mut self.input);
+    }
+
+    fn get_bytes_ignore_error(&self) -> Option<Vec<u8>> {
+        if self.input.is_empty() {
+            return None;
+        }
+
+        match self.display_variant {
+            BytesInputVariant::U8 => self
+                .input
+                .split_whitespace()
+                .map(|int| int.parse::<u8>())
+                .collect::<Result<Vec<u8>, _>>()
+                .ok(),
+            BytesInputVariant::String => Some(self.input.as_bytes().to_vec()),
+            BytesInputVariant::Hex => hex::decode(&self.input).ok(),
+            BytesInputVariant::VarInt => self.input.parse::<i64>().map(|int| int.encode_var_vec()).ok(),
+            BytesInputVariant::I16 => self
+                .input
+                .parse::<i16>()
+                .map(|int| int.to_be_bytes().to_vec())
+                .ok(),
+            BytesInputVariant::I32 => self
+                .input
+                .parse::<i32>()
+                .map(|int| int.to_be_bytes().to_vec())
+                .ok(),
+            BytesInputVariant::I64 => self
+                .input
+                .parse::<i64>()
+                .map(|int| int.to_be_bytes().to_vec())
+                .ok(),
+            BytesInputVariant::U16 => self
+                .input
+                .parse::<u16>()
+                .map(|int| int.to_be_bytes().to_vec())
+                .ok(),
+            BytesInputVariant::U32 => self
+                .input
+                .parse::<u32>()
+                .map(|int| int.to_be_bytes().to_vec())
+                .ok(),
+            BytesInputVariant::U64 => self
+                .input
+                .parse::<u64>()
+                .map(|int| int.to_be_bytes().to_vec())
+                .ok(),
+        }
+    }
+
+    pub(crate) fn get_bytes(&mut self) -> Option<Vec<u8>> {
+        if self.input.is_empty() {
+            self.err = false;
+            return None;
+        }
+
+        let bytes_opt = self.get_bytes_ignore_error();
+
+        if bytes_opt.is_none() {
+            self.err = true;
+        } else {
+            self.err = false;
+        }
+
+        bytes_opt
     }
 }
 
@@ -87,12 +225,9 @@ fn display_variant_dropdown<'a>(
         });
 
     response.context_menu(|menu| {
-        menu.radio_value(display_variant, BytesDisplayVariant::U8, "u8 array");
-        menu.radio_value(display_variant, BytesDisplayVariant::String, "UTF-8 String");
-        menu.radio_value(display_variant, BytesDisplayVariant::Hex, "Hex String");
-        menu.radio_value(display_variant, BytesDisplayVariant::SignedInt, "Signed Int");
-        menu.radio_value(display_variant, BytesDisplayVariant::UnsignedInt, "Unsigned Int");
-        menu.radio_value(display_variant, BytesDisplayVariant::VarInt, "VarInt");
+        for variant in BytesDisplayVariant::iter() {
+            menu.radio_value(display_variant, variant, variant.as_ref());
+        }
     });
     response
 }

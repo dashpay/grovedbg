@@ -1,6 +1,5 @@
 mod element_view;
 mod subtree_view;
-mod theme;
 
 use std::collections::BTreeMap;
 
@@ -15,6 +14,7 @@ use crate::{
     path_ctx::{Path, PathCtx},
     CommandsSender,
 };
+pub(crate) use element_view::WrappedElement;
 
 const NODE_WIDTH: f32 = 300.;
 
