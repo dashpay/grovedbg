@@ -397,57 +397,62 @@ impl ElementViewer {
 
                 element_flags: element_flags.map(|f| BytesView::new(f)),
             },
-            grovedbg_types::Element::AbsolutePathReference { path, element_flags } => {
-                ElementViewer::AbsolutePathReference {
-                    path: path.into_iter().map(|s| BytesView::new(s)).collect(),
-                    element_flags: element_flags.map(|f| BytesView::new(f)),
-                }
-            }
-            grovedbg_types::Element::UpstreamRootHeightReference {
+            grovedbg_types::Element::Reference(grovedbg_types::Reference::AbsolutePathReference {
+                path,
+                element_flags,
+            }) => ElementViewer::AbsolutePathReference {
+                path: path.into_iter().map(|s| BytesView::new(s)).collect(),
+                element_flags: element_flags.map(|f| BytesView::new(f)),
+            },
+            grovedbg_types::Element::Reference(grovedbg_types::Reference::UpstreamRootHeightReference {
                 n_keep,
                 path_append,
                 element_flags,
-            } => ElementViewer::UpstreamRootHeightReference {
+            }) => ElementViewer::UpstreamRootHeightReference {
                 n_keep,
                 path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
                 element_flags: element_flags.map(|f| BytesView::new(f)),
             },
-            grovedbg_types::Element::UpstreamRootHeightWithParentPathAdditionReference {
-                n_keep,
-                path_append,
-                element_flags,
-            } => ElementViewer::UpstreamRootHeightWithParentPathAdditionReference {
+            grovedbg_types::Element::Reference(
+                grovedbg_types::Reference::UpstreamRootHeightWithParentPathAdditionReference {
+                    n_keep,
+                    path_append,
+                    element_flags,
+                },
+            ) => ElementViewer::UpstreamRootHeightWithParentPathAdditionReference {
                 n_keep,
                 path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
                 element_flags: element_flags.map(|f| BytesView::new(f)),
             },
-            grovedbg_types::Element::UpstreamFromElementHeightReference {
+            grovedbg_types::Element::Reference(
+                grovedbg_types::Reference::UpstreamFromElementHeightReference {
+                    n_remove,
+                    path_append,
+                    element_flags,
+                },
+            ) => ElementViewer::UpstreamFromElementHeightReference {
                 n_remove,
-                path_append,
-                element_flags,
-            } => ElementViewer::UpstreamFromElementHeightReference {
-                n_remove,
                 path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
                 element_flags: element_flags.map(|f| BytesView::new(f)),
             },
-            grovedbg_types::Element::CousinReference {
+            grovedbg_types::Element::Reference(grovedbg_types::Reference::CousinReference {
                 swap_parent,
                 element_flags,
-            } => ElementViewer::CousinReference {
+            }) => ElementViewer::CousinReference {
                 swap_parent: BytesView::new(swap_parent),
                 element_flags: element_flags.map(|f| BytesView::new(f)),
             },
-            grovedbg_types::Element::RemovedCousinReference {
+            grovedbg_types::Element::Reference(grovedbg_types::Reference::RemovedCousinReference {
                 swap_parent,
                 element_flags,
-            } => ElementViewer::RemovedCousinReference {
+            }) => ElementViewer::RemovedCousinReference {
                 swap_parent: swap_parent.into_iter().map(|s| BytesView::new(s)).collect(),
                 element_flags: element_flags.map(|f| BytesView::new(f)),
             },
-            grovedbg_types::Element::SiblingReference {
+            grovedbg_types::Element::Reference(grovedbg_types::Reference::SiblingReference {
                 sibling_key,
                 element_flags,
-            } => ElementViewer::SiblingReference {
+            }) => ElementViewer::SiblingReference {
                 sibling_key: BytesView::new(sibling_key),
                 element_flags: element_flags.map(|f| BytesView::new(f)),
             },

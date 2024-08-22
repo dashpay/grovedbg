@@ -48,44 +48,49 @@ impl<'a, 'c> TryFrom<ElementCtx<'a, 'c>> for Element<'c> {
             grovedbg_types::Element::SumItem { value, element_flags } => {
                 Element::SumItem { value, element_flags }
             }
-            grovedbg_types::Element::AbsolutePathReference { path, element_flags } => {
-                from_absolute_path_reference(path_ctx, path, element_flags)?
-            }
-            grovedbg_types::Element::UpstreamRootHeightReference {
+            grovedbg_types::Element::Reference(grovedbg_types::Reference::AbsolutePathReference {
+                path,
+                element_flags,
+            }) => from_absolute_path_reference(path_ctx, path, element_flags)?,
+            grovedbg_types::Element::Reference(grovedbg_types::Reference::UpstreamRootHeightReference {
                 n_keep,
                 path_append,
                 element_flags,
-            } => from_upstream_root_height_reference(path_ctx, path, n_keep, path_append, element_flags)?,
-            grovedbg_types::Element::UpstreamFromElementHeightReference {
-                n_remove,
-                path_append,
-                element_flags,
-            } => {
+            }) => from_upstream_root_height_reference(path_ctx, path, n_keep, path_append, element_flags)?,
+            grovedbg_types::Element::Reference(
+                grovedbg_types::Reference::UpstreamFromElementHeightReference {
+                    n_remove,
+                    path_append,
+                    element_flags,
+                },
+            ) => {
                 from_upstream_element_height_reference(path_ctx, path, n_remove, path_append, element_flags)?
             }
-            grovedbg_types::Element::CousinReference {
+            grovedbg_types::Element::Reference(grovedbg_types::Reference::CousinReference {
                 swap_parent,
                 element_flags,
-            } => from_cousin_reference(path_ctx, path.to_vec(), key.to_vec(), swap_parent, element_flags)?,
-            grovedbg_types::Element::RemovedCousinReference {
+            }) => from_cousin_reference(path_ctx, path.to_vec(), key.to_vec(), swap_parent, element_flags)?,
+            grovedbg_types::Element::Reference(grovedbg_types::Reference::RemovedCousinReference {
                 swap_parent,
                 element_flags,
-            } => from_removed_cousin_reference(
+            }) => from_removed_cousin_reference(
                 path_ctx,
                 path.to_vec(),
                 key.to_vec(),
                 swap_parent,
                 element_flags,
             )?,
-            grovedbg_types::Element::SiblingReference {
+            grovedbg_types::Element::Reference(grovedbg_types::Reference::SiblingReference {
                 sibling_key,
                 element_flags,
-            } => from_sibling_reference(path_ctx, path.to_vec(), sibling_key, element_flags),
-            grovedbg_types::Element::UpstreamRootHeightWithParentPathAdditionReference {
-                n_keep,
-                path_append,
-                element_flags,
-            } => from_upstream_root_height_with_parent_path_addition_reference(
+            }) => from_sibling_reference(path_ctx, path.to_vec(), sibling_key, element_flags),
+            grovedbg_types::Element::Reference(
+                grovedbg_types::Reference::UpstreamRootHeightWithParentPathAdditionReference {
+                    n_keep,
+                    path_append,
+                    element_flags,
+                },
+            ) => from_upstream_root_height_with_parent_path_addition_reference(
                 path_ctx,
                 path,
                 n_keep,
