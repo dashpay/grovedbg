@@ -1,25 +1,33 @@
 [package]
 name = "grovedbg"
 authors = ["Evgeny Fomin <evgeny.fomin@dash.org>"]
-version = "0.2.0"
+version = "1.0.0"
 description = "GroveDB inspection tool"
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/dashpay/grovedbg"
 
 [dependencies]
-eframe = "0.27.2"
-egui_logger = "0.4.4"
+eframe = { version = "0.28.1", features = ["persistence"] }
+egui_logger = { git = "https://github.com/fominok/egui_logger", branch = "light-theme-colors" }
 futures = "0.3.30"
-grovedbg-types = { git = "https://github.com/dashpay/grovedb", rev = "96dd04e8269e718d24c83917fe70edebd126f2e6"}
+grovedbg-types = { path = "../grovedb/grovedbg-types", version = "2.0.0" }
 hex = "0.4.3"
-integer-encoding = "4.0.0"
+integer-encoding = "4.0.2"
 log = "0.4.22"
-reqwest = { version = "0.12.5", features = ["json"] }
+reqwest = { version = "0.12.7", features = ["json"] }
 slab = "0.4.9"
 strum = { version = "0.26.3", features = ["strum_macros", "derive"] }
-thiserror = "1.0.62"
-tokio = { version = "1.38.0", features = ["rt", "sync"] }
-tracing-subscriber = "0.3.18"
+egui-phosphor = "0.6.0"
+thiserror = "1.0.63"
+serde = { version = "1.0.208", features = ["derive"] }
+serde_json = "1.0.125"
+reingold-tilford = "1.0.0"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1.39.3", default-features = false, features = ["sync", "rt-multi-thread"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = { version = "1.39.3", default-features = false, features = ["sync"] }
 wasm-bindgen-futures = "0.4.42"
 web-sys = "0.3.69"
-
-[workspace]

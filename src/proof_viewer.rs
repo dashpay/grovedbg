@@ -1,11 +1,8 @@
 use eframe::egui::{self, CollapsingHeader, ScrollArea};
 
-use super::{common::binary_label, DisplayVariant};
-
-const MARGIN: f32 = 20.;
+use crate::bytes_utils::BytesView;
 
 pub(crate) struct ProofViewer {
-    // proof: grovedbg_types::Proof,
     prove_options: ProveOptionsView,
     root_layer: ProofLayerView,
 }
@@ -274,24 +271,6 @@ impl MerkProofNodeViewer {
                 }
             };
         });
-    }
-}
-
-struct BytesView {
-    bytes: Vec<u8>,
-    display_variant: DisplayVariant,
-}
-
-impl BytesView {
-    fn new(bytes: Vec<u8>) -> Self {
-        Self {
-            display_variant: DisplayVariant::guess(&bytes),
-            bytes,
-        }
-    }
-
-    fn draw(&mut self, ui: &mut egui::Ui) {
-        binary_label(ui, &self.bytes, &mut self.display_variant);
     }
 }
 

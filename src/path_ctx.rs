@@ -1,14 +1,21 @@
+//! Subtrees paths manipulation and storage module.
+//! Path identification, comparison, display and shared subtrees properties like
+//! visibility -- all goes through `PathCtx`.
+
 use std::{
     cell::RefCell,
-    collections::VecDeque,
-    fmt::{self, Display},
+    fmt::{self, Write},
     hash::{Hash, Hasher},
-    iter, ptr,
+    iter,
 };
 
+use eframe::egui::{self, Label};
 use slab::Slab;
 
-use crate::ui::{common::bytes_by_display_variant, DisplayVariant};
+use crate::{
+    bytes_utils::{bytes_by_display_variant, BytesDisplayVariant},
+    profiles::ActiveProfileSubtreeContext,
+};
 
 type SegmentId = usize;
 
@@ -16,7 +23,13 @@ type SegmentId = usize;
 pub(crate) struct PathCtx {
     slab: RefCell<Slab<PathSegment>>,
     root_children_slab_ids: RefCell<Vec<SegmentId>>,
-    selected_for_query: RefCell<Option<SegmentId>>,
+    selected_for_query: RefCell<Option<SelectedForQuery>>,
+}
+
+#[derive(Clone, Copy)]
+enum SelectedForQuery {
+    Root,
+    Subtree(SegmentId),
 }
 
 impl fmt::Debug for PathCtx {
@@ -45,15 +58,6 @@ impl PathCtx {
         current_path
     }
 
-    pub fn add_profiles_alias(&self, path: Vec<Vec<u8>>, profiles_alias: String) -> Path {
-        let path = self.add_path(path);
-        if let Some(id) = path.head_slab_id {
-            let mut slab = self.slab.borrow_mut();
-            slab[id].profiles_alias = Some(profiles_alias);
-        }
-        path
-    }
-
     pub fn add_iter<S, I>(&self, path: I) -> Path
     where
         I: IntoIterator<Item = S>,
@@ -68,7 +72,10 @@ impl PathCtx {
 
     pub fn get_selected_for_query(&self) -> Option<Path> {
         self.selected_for_query.borrow().map(|id| Path {
-            head_slab_id: Some(id),
+            head_slab_id: match id {
+                SelectedForQuery::Root => None,
+                SelectedForQuery::Subtree(s) => Some(s),
+            },
             ctx: self,
         })
     }
@@ -78,9 +85,9 @@ pub(crate) struct PathSegment {
     parent_slab_id: Option<SegmentId>,
     children_slab_ids: Vec<SegmentId>,
     bytes: Vec<u8>,
-    display: DisplayVariant,
+    display: BytesDisplayVariant,
     level: usize,
-    profiles_alias: Option<String>,
+    visible: RefCell<bool>,
 }
 
 impl PathSegment {
@@ -88,8 +95,12 @@ impl PathSegment {
         &self.bytes
     }
 
-    pub fn display(&self) -> DisplayVariant {
-        self.display
+    pub fn view_by_display(&self) -> String {
+        bytes_by_display_variant(&self.bytes, &self.display)
+    }
+
+    pub fn set_visible(&self) {
+        *self.visible.borrow_mut() = true;
     }
 }
 
@@ -131,14 +142,26 @@ impl Ord for Path<'_> {
 }
 
 impl<'c> Path<'c> {
-    pub fn get_profiles_alias(&self) -> Option<String> {
-        self.for_last_segment(|s| s.profiles_alias.clone()).flatten()
+    pub fn get_ctx(&self) -> &'c PathCtx {
+        self.ctx
     }
 
-    pub fn clear_profile_alias(&self) {
-        if let Some(id) = self.head_slab_id {
-            let mut slab = self.ctx.slab.borrow_mut();
-            slab[id].profiles_alias = None;
+    pub fn for_visible_mut<T>(&self, f: impl FnOnce(&mut bool) -> T) -> Option<T> {
+        self.head_slab_id.map(|id| {
+            let slab = self.ctx.slab.borrow();
+            let mut segment_visible = slab[id].visible.borrow_mut();
+            f(&mut segment_visible)
+        })
+    }
+
+    pub fn visible(&self) -> bool {
+        self.for_last_segment(|s| *s.visible.borrow()).unwrap_or_default()
+    }
+
+    pub fn get_root(&self) -> Path<'c> {
+        Path {
+            head_slab_id: None,
+            ctx: self.ctx,
         }
     }
 
@@ -172,7 +195,7 @@ impl<'c> Path<'c> {
     }
 
     pub fn child(&self, key: Vec<u8>) -> Path<'c> {
-        let mut slab = self.ctx.slab.borrow_mut();
+        let slab = self.ctx.slab.borrow();
         let mut root_children = self.ctx.root_children_slab_ids.borrow_mut();
         let level = self.head_slab_id.map(|id| slab[id].level).unwrap_or_default();
 
@@ -188,13 +211,15 @@ impl<'c> Path<'c> {
                 ctx: self.ctx,
             }
         } else {
+            drop(slab);
+            let mut slab = self.ctx.slab.borrow_mut();
             let child_segment_id = slab.insert(PathSegment {
                 parent_slab_id: self.head_slab_id,
                 children_slab_ids: Vec::new(),
-                display: DisplayVariant::guess(&key),
+                display: BytesDisplayVariant::guess(&key),
                 bytes: key,
                 level: level + 1,
-                profiles_alias: None,
+                visible: RefCell::new(false),
             });
             let children_vec = self
                 .head_slab_id
@@ -208,10 +233,6 @@ impl<'c> Path<'c> {
         }
     }
 
-    fn is_root(&self) -> bool {
-        self.head_slab_id.is_none()
-    }
-
     pub fn for_last_segment<F, T>(&self, f: F) -> Option<T>
     where
         F: FnOnce(&PathSegment) -> T,
@@ -222,7 +243,7 @@ impl<'c> Path<'c> {
         })
     }
 
-    pub fn update_display_variant(&self, display: DisplayVariant) {
+    pub fn update_display_variant(&self, display: BytesDisplayVariant) {
         self.head_slab_id.into_iter().for_each(|id| {
             let mut slab = self.ctx.slab.borrow_mut();
             let segment = &mut slab[id];
@@ -230,21 +251,12 @@ impl<'c> Path<'c> {
         });
     }
 
-    pub fn get_display_variant(&self) -> Option<DisplayVariant> {
+    pub fn get_display_variant(&self) -> Option<BytesDisplayVariant> {
         self.head_slab_id.map(|id| {
             let mut slab = self.ctx.slab.borrow_mut();
             let segment = &mut slab[id];
             segment.display
         })
-    }
-
-    pub fn for_display_mut<T>(&self, f: impl FnOnce(&mut DisplayVariant) -> T) -> Option<T> {
-        if let Some(id) = self.head_slab_id {
-            let mut slab = self.ctx.slab.borrow_mut();
-            Some(f(&mut slab[id].display))
-        } else {
-            None
-        }
     }
 
     pub fn for_segments<F, T>(&self, f: F) -> T
@@ -276,72 +288,79 @@ impl<'c> Path<'c> {
         path
     }
 
-    pub fn for_children<F, T>(&self, f: F) -> T
-    where
-        F: FnOnce(ChildPathsIter) -> T,
-    {
-        let slab = self.ctx.slab.borrow();
-        let root_children = self.ctx.root_children_slab_ids.borrow();
-        let children_vec = if let Some(segment_id) = self.head_slab_id {
-            &slab[segment_id].children_slab_ids
-        } else {
-            root_children.as_ref()
-        };
-        let paths_iter: ChildPathsIter = iter::repeat(self.ctx).zip(children_vec.iter()).map(id_to_path);
-
-        f(paths_iter)
-    }
-
-    pub fn for_each_descendant_recursively<F>(&self, f: F)
-    where
-        F: Fn(Path),
-    {
-        let slab = self.ctx.slab.borrow();
-        let root_children = self.ctx.root_children_slab_ids.borrow();
-
-        let mut descendant_paths: VecDeque<_> = if let Some(segment_id) = self.head_slab_id {
-            &slab[segment_id].children_slab_ids
-        } else {
-            root_children.as_ref()
-        }
-        .iter()
-        .map(|id| id_to_path((self.ctx, id)))
-        .collect();
-
-        while let Some(desc_path) = descendant_paths.pop_front() {
-            descendant_paths.extend(
-                slab[desc_path
-                    .head_slab_id
-                    .expect("child vectors can't contain root node")]
-                .children_slab_ids
-                .iter()
-                .map(|id| id_to_path((self.ctx, id))),
-            );
-            f(desc_path);
-        }
-    }
-
     pub fn select_for_query(&self) {
-        *self.ctx.selected_for_query.borrow_mut() = self.head_slab_id;
+        *self.ctx.selected_for_query.borrow_mut() = Some(
+            self.head_slab_id
+                .map(SelectedForQuery::Subtree)
+                .unwrap_or(SelectedForQuery::Root),
+        );
+    }
+
+    pub fn id(&self) -> egui::Id {
+        egui::Id::new(self.head_slab_id.map(|x| x + 1).unwrap_or_default())
     }
 }
 
 type SegmentsIter<'c> = iter::Rev<std::vec::IntoIter<&'c PathSegment>>;
 
-type ChildPathsIter<'a, 'c> = iter::Map<
-    iter::Zip<iter::Repeat<&'c PathCtx>, std::slice::Iter<'a, SegmentId>>,
-    fn((&'c PathCtx, &'a SegmentId)) -> Path<'c>,
->;
-
-fn id_to_segment((slab, id): (&Slab<PathSegment>, SegmentId)) -> &PathSegment {
-    slab.get(id).expect("ids must be valid")
+pub(crate) fn full_path_display_iter<'c>(
+    segments_iter: SegmentsIter<'c>,
+    profile_ctx: &'c ActiveProfileSubtreeContext,
+) -> impl Iterator<Item = String> + 'c + Clone + ExactSizeIterator + DoubleEndedIterator {
+    segments_iter
+        .map(|s| s.view_by_display())
+        .zip(profile_ctx.path_segments_aliases().iter())
+        .map(|(segment_variant, profile_alias)| {
+            profile_alias
+                .as_ref()
+                .map(|alias| alias.clone())
+                .unwrap_or(segment_variant)
+        })
 }
 
-fn id_to_path<'a, 's>((ctx, id): (&'s PathCtx, &'a SegmentId)) -> Path<'s> {
-    Path {
-        head_slab_id: Some(*id),
-        ctx,
+pub(crate) fn full_path_display<I>(mut full_path_iter: I) -> String
+where
+    I: Iterator<Item = String> + ExactSizeIterator + DoubleEndedIterator,
+{
+    if full_path_iter.len() > 0 {
+        let mut buffer = String::from("[");
+        let last = full_path_iter.next_back().expect("checked length");
+        full_path_iter.for_each(|s| {
+            write!(&mut buffer, "{s}, ").ok();
+        });
+        write!(&mut buffer, "{last}]").ok();
+        buffer
+    } else {
+        "Root tree".to_owned()
     }
+}
+
+pub(crate) fn path_label(ui: &mut egui::Ui, path: Path, profile_ctx: &ActiveProfileSubtreeContext) {
+    path.for_segments(|segments_iter| {
+        let mut path_segments_iter = full_path_display_iter(segments_iter, profile_ctx);
+        let full_path_iter = path_segments_iter.clone();
+
+        let text = if path_segments_iter.len() == 0 {
+            "Root subtree".to_owned()
+        } else {
+            if path_segments_iter.len() < 3 {
+                let mut buffer = String::from("[");
+                let last = path_segments_iter.next_back().expect("checked length");
+                path_segments_iter.for_each(|s| {
+                    write!(&mut buffer, "{}, ", s).ok();
+                });
+                write!(&mut buffer, "{}]", last).ok();
+                buffer
+            } else {
+                let last = path_segments_iter.next_back().expect("checked length");
+                let pre_last = path_segments_iter.next_back().expect("checked length");
+                format!("[..., {pre_last}, {last}]")
+            }
+        };
+
+        ui.add(Label::new(text).truncate())
+            .on_hover_text(full_path_display(full_path_iter));
+    })
 }
 
 #[cfg(test)]
@@ -355,19 +374,6 @@ mod tests {
         let sub_2 = sub_1.child(b"key2".to_vec());
         let sub_2_again = sub_1.child(b"key2".to_vec());
         assert_eq!(sub_2.head_slab_id, sub_2_again.head_slab_id);
-    }
-
-    #[test]
-    fn children_ids() {
-        let ctx = PathCtx::new();
-        let sub_1 = ctx.get_root().child(b"key1".to_vec());
-        sub_1.child(b"key2".to_vec());
-        sub_1.child(b"key3".to_vec());
-        let mut children: Vec<Vec<u8>> = Vec::new();
-        sub_1.for_children(|children_iter| {
-            children.extend(children_iter.map(|p| p.for_last_segment(|k| k.bytes().to_vec()).unwrap()))
-        });
-        assert_eq!(children, vec![b"key2", b"key3"]);
     }
 
     #[test]
