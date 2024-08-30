@@ -1,47 +1,53 @@
-use eframe::egui::{
-    self, Align, CollapsingHeader, Color32, Frame, Layout, Margin, RadioButton, RichText, TextEdit, Vec2,
-};
+use eframe::egui::{self, CollapsingHeader, Color32, Frame, Margin, RadioButton, RichText};
 use grovedbg_types::{PathQuery, Query, QueryItem, SubqueryBranch};
 use integer_encoding::VarInt;
-use tokio::sync::mpsc::Sender;
+use strum::IntoEnumIterator;
 
-use super::common::path_label;
-use crate::{fetch::Message, model::path_display::PathCtx};
+use crate::{
+    bytes_utils::BytesInputVariant,
+    path_ctx::{path_label, Path, PathCtx},
+    profiles::RootActiveProfileContext,
+    protocol::Command,
+    CommandsSender,
+};
 
 const MARGIN: f32 = 20.;
 
-pub(crate) struct QueryBuilder<'p> {
-    path_ctx: &'p PathCtx,
-    sender: Sender<Message>,
+pub(crate) struct QueryBuilder {
     limit_input: OptionalNumberInput,
     offset_input: OptionalNumberInput,
     query: QueryInput,
 }
 
-impl<'p> QueryBuilder<'p> {
-    pub fn new(path_ctx: &'p PathCtx, sender: Sender<Message>) -> Self {
+impl QueryBuilder {
+    pub fn new() -> Self {
         QueryBuilder {
-            path_ctx,
             limit_input: OptionalNumberInput::new("Limit".to_owned()),
             offset_input: OptionalNumberInput::new("Offset".to_owned()),
             query: QueryInput::new(0),
-            sender,
         }
     }
 
-    pub fn draw(&mut self, ui: &mut egui::Ui) {
-        if let Some(path) = self.path_ctx.get_selected_for_query() {
-            path_label(ui, path);
+    pub fn draw<'pf>(
+        &mut self,
+        ui: &mut egui::Ui,
+        path_ctx: &PathCtx,
+        profile_ctx: RootActiveProfileContext<'pf>,
+        sender: &CommandsSender,
+    ) {
+        if let Some(path) = path_ctx.get_selected_for_query() {
+            let profile_ctx = profile_ctx.fast_forward(path);
+            path_label(ui, path, &profile_ctx);
             self.limit_input.draw(ui);
             self.offset_input.draw(ui);
             self.query.draw(ui);
 
             ui.horizontal(|line| {
                 if line.button("Prove").clicked() {
-                    self.prove_query();
+                    self.prove_query(&path, sender);
                 }
                 if line.button("Fetch").clicked() {
-                    self.fetch_query();
+                    self.fetch_query(&path, sender);
                 }
             });
         } else {
@@ -49,40 +55,36 @@ impl<'p> QueryBuilder<'p> {
         }
     }
 
-    fn prove_query(&self) {
-        if let Some(path) = self.path_ctx.get_selected_for_query() {
-            let path_query = PathQuery {
-                path: path.to_vec(),
-                query: grovedbg_types::SizedQuery {
-                    query: self.query.get_query(),
-                    limit: self.limit_input.number,
-                    offset: self.offset_input.number,
-                },
-            };
+    fn prove_query(&self, path: &Path, sender: &CommandsSender) {
+        let path_query = PathQuery {
+            path: path.to_vec(),
+            query: grovedbg_types::SizedQuery {
+                query: self.query.get_query(),
+                limit: self.limit_input.number,
+                offset: self.offset_input.number,
+            },
+        };
 
-            self.sender
-                .blocking_send(Message::ProvePathQuery { path_query })
-                .inspect_err(|_| log::error!("Can't reach data fetching thread"))
-                .ok();
-        }
+        sender
+            .blocking_send(Command::ProvePathQuery { path_query })
+            .inspect_err(|_| log::error!("Can't reach data fetching thread"))
+            .ok();
     }
 
-    fn fetch_query(&self) {
-        if let Some(path) = self.path_ctx.get_selected_for_query() {
-            let path_query = PathQuery {
-                path: path.to_vec(),
-                query: grovedbg_types::SizedQuery {
-                    query: self.query.get_query(),
-                    limit: self.limit_input.number,
-                    offset: self.offset_input.number,
-                },
-            };
+    fn fetch_query(&self, path: &Path, sender: &CommandsSender) {
+        let path_query = PathQuery {
+            path: path.to_vec(),
+            query: grovedbg_types::SizedQuery {
+                query: self.query.get_query(),
+                limit: self.limit_input.number,
+                offset: self.offset_input.number,
+            },
+        };
 
-            self.sender
-                .blocking_send(Message::FetchWithPathQuery { path_query })
-                .inspect_err(|_| log::error!("Can't reach data fetching thread"))
-                .ok();
-        }
+        sender
+            .blocking_send(Command::FetchWithPathQuery { path_query })
+            .inspect_err(|_| log::error!("Can't reach data fetching thread"))
+            .ok();
     }
 }
 
@@ -128,24 +130,10 @@ impl OptionalNumberInput {
     }
 }
 
-#[derive(PartialEq)]
-enum BytesInputDisplayVariant {
-    U8,
-    String,
-    Hex,
-    VarInt,
-    I16,
-    I32,
-    I64,
-    U16,
-    U32,
-    U64,
-}
-
 struct BytesInput {
     bytes: Vec<u8>,
     input: String,
-    display_variant: BytesInputDisplayVariant,
+    display_variant: BytesInputVariant,
     label: String,
     err: bool,
 }
@@ -155,7 +143,7 @@ impl BytesInput {
         Self {
             bytes: Vec::new(),
             input: String::new(),
-            display_variant: BytesInputDisplayVariant::Hex,
+            display_variant: BytesInputVariant::Hex,
             label,
             err: false,
         }
@@ -172,91 +160,67 @@ impl BytesInput {
             let response = line.text_edit_singleline(&mut self.input).labelled_by(label.id);
 
             response.context_menu(|menu| {
-                menu.radio_value(
-                    &mut self.display_variant,
-                    BytesInputDisplayVariant::U8,
-                    "u8 array",
-                );
-                menu.radio_value(
-                    &mut self.display_variant,
-                    BytesInputDisplayVariant::String,
-                    "UTF-8 String",
-                );
-                menu.radio_value(
-                    &mut self.display_variant,
-                    BytesInputDisplayVariant::Hex,
-                    "Hex String",
-                );
-                menu.radio_value(
-                    &mut self.display_variant,
-                    BytesInputDisplayVariant::VarInt,
-                    "VarInt",
-                );
-                menu.radio_value(&mut self.display_variant, BytesInputDisplayVariant::I16, "i16");
-                menu.radio_value(&mut self.display_variant, BytesInputDisplayVariant::I32, "i32");
-                menu.radio_value(&mut self.display_variant, BytesInputDisplayVariant::I64, "i64");
-                menu.radio_value(&mut self.display_variant, BytesInputDisplayVariant::U16, "u16");
-                menu.radio_value(&mut self.display_variant, BytesInputDisplayVariant::U32, "u32");
-                menu.radio_value(&mut self.display_variant, BytesInputDisplayVariant::U64, "u64");
+                for variant in BytesInputVariant::iter() {
+                    menu.radio_value(&mut self.display_variant, variant, variant.as_ref());
+                }
             });
 
             if response.lost_focus() {
                 self.err = false;
                 self.bytes = match self.display_variant {
-                    BytesInputDisplayVariant::U8 => self
+                    BytesInputVariant::U8 => self
                         .input
                         .split_whitespace()
                         .map(|int| int.parse::<u8>())
                         .collect::<Result<Vec<u8>, _>>()
                         .inspect_err(|_| self.err = true)
                         .unwrap_or_default(),
-                    BytesInputDisplayVariant::String => self.input.as_bytes().to_vec(),
-                    BytesInputDisplayVariant::Hex => hex::decode(&self.input)
+                    BytesInputVariant::String => self.input.as_bytes().to_vec(),
+                    BytesInputVariant::Hex => hex::decode(&self.input)
                         .inspect_err(|_| self.err = true)
                         .unwrap_or_default(),
-                    BytesInputDisplayVariant::VarInt => self
+                    BytesInputVariant::VarInt => self
                         .input
                         .parse::<i64>()
                         .map(|int| int.encode_var_vec())
                         .inspect_err(|_| self.err = true)
                         .unwrap_or_default(),
-                    BytesInputDisplayVariant::I16 => self
+                    BytesInputVariant::I16 => self
                         .input
                         .parse::<i16>()
                         .map(|int| int.to_be_bytes().to_vec())
                         .inspect_err(|_| self.err = true)
                         .unwrap_or_default(),
-                    BytesInputDisplayVariant::I32 => self
+                    BytesInputVariant::I32 => self
                         .input
                         .parse::<i32>()
                         .map(|int| int.to_be_bytes().to_vec())
                         .inspect_err(|_| self.err = true)
                         .unwrap_or_default(),
-                    BytesInputDisplayVariant::I64 => self
+                    BytesInputVariant::I64 => self
                         .input
                         .parse::<i64>()
                         .map(|int| int.to_be_bytes().to_vec())
                         .inspect_err(|_| self.err = true)
                         .unwrap_or_default(),
-                    BytesInputDisplayVariant::U16 => self
+                    BytesInputVariant::U16 => self
                         .input
                         .parse::<u16>()
                         .map(|int| int.to_be_bytes().to_vec())
                         .inspect_err(|_| self.err = true)
                         .unwrap_or_default(),
-                    BytesInputDisplayVariant::U32 => self
+                    BytesInputVariant::U32 => self
                         .input
                         .parse::<u32>()
                         .map(|int| int.to_be_bytes().to_vec())
                         .inspect_err(|_| self.err = true)
                         .unwrap_or_default(),
-                    BytesInputDisplayVariant::U64 => self
+                    BytesInputVariant::U64 => self
                         .input
                         .parse::<u64>()
                         .map(|int| int.to_be_bytes().to_vec())
                         .inspect_err(|_| self.err = true)
                         .unwrap_or_default(),
-                    _ => Vec::new(),
                 }
             }
         });
