@@ -647,10 +647,10 @@ impl ElementViewer {
     }
 }
 
-struct ProofNode {
-    left: Option<usize>,
-    right: Option<usize>,
-    value: MerkProofNodeViewer,
+pub(crate) struct ProofNode {
+    pub(crate) left: Option<usize>,
+    pub(crate) right: Option<usize>,
+    pub(crate) value: MerkProofNodeViewer,
 }
 
 impl From<grovedbg_types::MerkProofNode> for ProofNode {
@@ -663,9 +663,9 @@ impl From<grovedbg_types::MerkProofNode> for ProofNode {
     }
 }
 
-struct ProofTree {
-    tree: Vec<ProofNode>,
-    root: usize,
+pub(crate) struct ProofTree {
+    pub(crate) tree: Vec<ProofNode>,
+    pub(crate) root: usize,
 }
 
 impl ProofTree {

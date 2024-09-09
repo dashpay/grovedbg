@@ -8,6 +8,7 @@ use reingold_tilford::{Coordinate, NodeInfo};
 use crate::{
     path_ctx::Path,
     profiles::ActiveProfileSubtreeContext,
+    proof_viewer::ProofNode,
     protocol::Command,
     tree_data::SubtreeData,
     tree_view::{ElementView, ElementViewContext, SubtreeElements, NODE_WIDTH},
@@ -16,9 +17,9 @@ use crate::{
 
 const INNER_MARGIN: f32 = 8.;
 
-struct MerkTree<'a>(&'a SubtreeElements);
+struct MerkTree<T>(T);
 
-impl<'a> NodeInfo<&'a Key> for MerkTree<'a> {
+impl<'a> NodeInfo<&'a Key> for MerkTree<&'a SubtreeElements> {
     type Key = &'a Key;
 
     fn key(&self, key: &'a Key) -> Self::Key {
@@ -40,6 +41,22 @@ impl<'a> NodeInfo<&'a Key> for MerkTree<'a> {
                     .flatten()
                     .into_iter(),
             )
+            .collect()
+    }
+}
+
+impl NodeInfo<usize> for MerkTree<Vec<ProofNode>> {
+    type Key = usize;
+
+    fn key(&self, key: usize) -> Self::Key {
+        key
+    }
+
+    fn children(&self, key: usize) -> reingold_tilford::SmallVec<usize> {
+        let node = self.0.get(key);
+        node.and_then(|a| a.left)
+            .into_iter()
+            .chain(node.and_then(|a| a.right))
             .collect()
     }
 }
