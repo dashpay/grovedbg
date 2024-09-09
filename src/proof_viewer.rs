@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Context};
 use eframe::egui::{self, CollapsingHeader, ScrollArea};
 
 use crate::bytes_utils::BytesView;
@@ -149,9 +150,9 @@ enum MerkProofNodeViewer {
     KVRefValueHash(BytesView, ElementViewer, BytesView),
 }
 
-impl MerkProofNodeViewer {
-    fn new(node: grovedbg_types::MerkProofNode) -> Self {
-        match node {
+impl From<grovedbg_types::MerkProofNode> for MerkProofNodeViewer {
+    fn from(value: grovedbg_types::MerkProofNode) -> Self {
+        match value {
             grovedbg_types::MerkProofNode::Hash(hash) => {
                 MerkProofNodeViewer::Hash(BytesView::new(hash.to_vec()))
             }
@@ -187,6 +188,12 @@ impl MerkProofNodeViewer {
                 )
             }
         }
+    }
+}
+
+impl MerkProofNodeViewer {
+    fn new(node: grovedbg_types::MerkProofNode) -> Self {
+        node.into()
     }
 
     fn draw(&mut self, ui: &mut egui::Ui) {
@@ -637,5 +644,97 @@ impl ElementViewer {
                 }
             }
         }
+    }
+}
+
+struct ProofNode {
+    left: Option<usize>,
+    right: Option<usize>,
+    value: MerkProofNodeViewer,
+}
+
+impl From<grovedbg_types::MerkProofNode> for ProofNode {
+    fn from(value: grovedbg_types::MerkProofNode) -> Self {
+        ProofNode {
+            left: None,
+            right: None,
+            value: value.into(),
+        }
+    }
+}
+
+struct ProofTree {
+    tree: Vec<ProofNode>,
+    root: usize,
+}
+
+impl ProofTree {
+    fn from_iter<I>(iter: I) -> anyhow::Result<Self>
+    where
+        I: IntoIterator<Item = grovedbg_types::MerkProofOp>,
+    {
+        let mut stack: Vec<usize> = Vec::new();
+        let mut tree: Vec<ProofNode> = Vec::new();
+
+        for op in iter.into_iter() {
+            match op {
+                grovedbg_types::MerkProofOp::Push(x) => {
+                    tree.push(x.into());
+                    stack.push(tree.len() - 1);
+                }
+                grovedbg_types::MerkProofOp::PushInverted(x) => {
+                    tree.push(x.into());
+                    stack.push(tree.len() - 1);
+                }
+                grovedbg_types::MerkProofOp::Parent => {
+                    // Pops the top stack item as `parent`. Pops the next top stack item as
+                    // `child`. Attaches `child` as the left child of `parent`. Pushes the
+                    // updated `parent` back on the stack.
+
+                    let parent_idx = stack.pop().context("expected a parent item on the proof stack")?;
+                    let child_idx = stack.pop().context("expected a child item on the proof stack")?;
+
+                    tree[parent_idx].left = Some(child_idx);
+                    stack.push(parent_idx);
+                }
+                grovedbg_types::MerkProofOp::Child => {
+                    // Pops the top stack item as `child`. Pops the next top stack item as
+                    // `parent`. Attaches `child` as the right child of `parent`. Pushes the
+                    // updated `parent` back on the stack.
+
+                    let child_idx = stack.pop().context("expected a child item on the proof stack")?;
+                    let parent_idx = stack.pop().context("expected a parent item on the proof stack")?;
+
+                    tree[parent_idx].right = Some(child_idx);
+                    stack.push(parent_idx);
+                }
+                grovedbg_types::MerkProofOp::ParentInverted => {
+                    // Pops the top stack item as `parent`. Pops the next top stack item as
+                    // `child`. Attaches `child` as the right child of `parent`. Pushes the
+                    // updated `parent` back on the stack.
+
+                    let parent_idx = stack.pop().context("expected a parent item on the proof stack")?;
+                    let child_idx = stack.pop().context("expected a child item on the proof stack")?;
+
+                    tree[parent_idx].right = Some(child_idx);
+                    stack.push(parent_idx);
+                }
+                grovedbg_types::MerkProofOp::ChildInverted => {
+                    // Pops the top stack item as `child`. Pops the next top stack item as
+                    // `parent`. Attaches `child` as the left child of `parent`. Pushes the
+                    // updated `parent` back on the stack.
+
+                    let child_idx = stack.pop().context("expected a child item on the proof stack")?;
+                    let parent_idx = stack.pop().context("expected a parent item on the proof stack")?;
+
+                    tree[parent_idx].left = Some(child_idx);
+                    stack.push(parent_idx);
+                }
+            }
+        }
+
+        (stack.len() == 1)
+            .then(|| ProofTree { tree, root: stack[0] })
+            .ok_or_else(|| anyhow!("the proof stack must contain only one item"))
     }
 }
