@@ -11,7 +11,7 @@ repository = "https://github.com/dashpay/grovedbg"
 eframe = { version = "0.28.1", features = ["persistence"] }
 egui_logger = { git = "https://github.com/fominok/egui_logger", branch = "light-theme-colors" }
 futures = "0.3.30"
-grovedbg-types = { path = "../grovedb/grovedbg-types", version = "2.0.0" }
+grovedbg-types = { path = "../grovedb/grovedbg-types", version = "2.0.3" }
 hex = "0.4.3"
 integer-encoding = "4.0.2"
 log = "0.4.22"
