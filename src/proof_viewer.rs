@@ -80,7 +80,7 @@ impl MerkProofViewer {
     }
 }
 
-enum MerkProofOpViewer {
+pub(crate) enum MerkProofOpViewer {
     Push(MerkProofNodeViewer),
     PushInverted(MerkProofNodeViewer),
     Parent,
@@ -669,7 +669,7 @@ pub(crate) struct ProofTree {
 }
 
 impl ProofTree {
-    fn from_iter<I>(iter: I) -> anyhow::Result<Self>
+    pub(crate) fn from_iter<I>(iter: I) -> anyhow::Result<Self>
     where
         I: IntoIterator<Item = grovedbg_types::MerkProofOp>,
     {

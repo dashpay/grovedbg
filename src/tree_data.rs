@@ -1,15 +1,17 @@
-use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
+use std::collections::{btree_map::Entry, BTreeMap, BTreeSet, VecDeque};
 
 use grovedbg_types::{Key, NodeUpdate};
 
 use crate::{
     path_ctx::{Path, PathCtx},
+    proof_viewer::{MerkProofOpViewer, ProofTree},
     tree_view::{ElementOrPlaceholder, ElementView, SubtreeElements},
 };
 
 pub(crate) struct TreeData<'pa> {
     path_ctx: &'pa PathCtx,
     data: BTreeMap<Path<'pa>, SubtreeData>,
+    proof_data: Option<BTreeMap<Path<'pa>, BTreeMap<Key, MerkProofOpViewer>>>,
     merk_selected: Path<'pa>,
 }
 
@@ -27,11 +29,23 @@ impl SubtreeData {
 }
 
 impl<'pa> TreeData<'pa> {
+    pub(crate) fn build_proof_data(&mut self, proof: grovedbg_types::Proof) {
+        let mut queue = VecDeque::new();
+        queue.push_back((self.path_ctx.get_root(), proof.root_layer));
+
+        let mut proof_data = BTreeMap::new();
+
+        while let Some((path, proof)) = queue.pop_front() {
+            let proof_tree = ProofTree::from_iter(proof.merk_proof);
+        }
+    }
+
     pub(crate) fn new(path_ctx: &'pa PathCtx) -> Self {
         Self {
             path_ctx,
             data: Default::default(),
             merk_selected: path_ctx.get_root(),
+            proof_data: None,
         }
     }
 
@@ -104,8 +118,8 @@ impl<'pa> TreeData<'pa> {
                 e.insert(ElementView::new(
                     key,
                     ElementOrPlaceholder::Element(element),
-                    left_child,
-                    right_child,
+                    left_child.clone(),
+                    right_child.clone(),
                     Some(kv_digest_hash),
                     Some(value_hash),
                 ));
@@ -114,11 +128,37 @@ impl<'pa> TreeData<'pa> {
                 let e = o.get_mut();
 
                 e.value = ElementOrPlaceholder::Element(element);
-                e.left_child = left_child;
-                e.right_child = right_child;
+                e.left_child = left_child.clone();
+                e.right_child = right_child.clone();
                 e.kv_digest_hash = Some(kv_digest_hash);
                 e.value_hash = Some(value_hash);
             }
         };
+
+        if let (Some(left_hash), Some(left_key)) = (left_merk_hash, left_child) {
+            match subtree.elements.entry(left_key.clone()) {
+                Entry::Vacant(e) => {
+                    let element = e.insert(ElementView::new_placeholder(left_key));
+                    element.node_hash = Some(left_hash);
+                }
+                Entry::Occupied(mut o) => {
+                    let e = o.get_mut();
+                    e.node_hash = Some(left_hash);
+                }
+            };
+        }
+
+        if let (Some(right_hash), Some(right_key)) = (right_merk_hash, right_child) {
+            match subtree.elements.entry(right_key.clone()) {
+                Entry::Vacant(e) => {
+                    let element = e.insert(ElementView::new_placeholder(right_key));
+                    element.node_hash = Some(right_hash);
+                }
+                Entry::Occupied(mut o) => {
+                    let e = o.get_mut();
+                    e.node_hash = Some(right_hash);
+                }
+            };
+        }
     }
 }

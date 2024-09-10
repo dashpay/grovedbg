@@ -381,6 +381,7 @@ impl App for GroveDbgApp {
                         }
                     }
                     GroveGdbUpdate::Proof(proof) => {
+                        self.tree_data.build_proof_data(proof.clone());
                         self.proof_viewer = Some(ProofViewer::new(proof));
                         self.show_proof_viewer = true;
                     }

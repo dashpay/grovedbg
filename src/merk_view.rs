@@ -168,6 +168,20 @@ impl MerkView {
                             } else {
                                 line.add_enabled(false, right_button);
                             }
+
+                            if line
+                                .button(egui_phosphor::regular::ARROW_CLOCKWISE)
+                                .on_hover_text("Refetch the node")
+                                .clicked()
+                            {
+                                let _ = self
+                                    .commands_sender
+                                    .blocking_send(Command::FetchNode {
+                                        path: path.to_vec(),
+                                        key: key.clone(),
+                                    })
+                                    .inspect_err(|_| log::error!("Unable to reach GroveDBG protocol thread"));
+                            }
                         });
 
                         node_ui.max_rect().center_bottom()
