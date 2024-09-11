@@ -1,7 +1,13 @@
-use futures::TryFutureExt;
+mod proof_tree;
+
+use std::collections::{BTreeMap, VecDeque};
+
+use futures::{Future, TryFutureExt};
 use grovedbg_types::{Key, NodeFetchRequest, NodeUpdate, Path, PathQuery, Proof, RootFetchRequest};
 use reqwest::{Client, Url};
 use tokio::sync::mpsc::{Receiver, Sender};
+
+use crate::proof_viewer::{ProofSubtree, ProofTree};
 
 /// Starts the data exchange process between GroveDBG application and GroveDB's
 /// debugger endpoint.
@@ -45,7 +51,7 @@ pub enum Command {
 pub enum GroveGdbUpdate {
     RootUpdate(Option<NodeUpdate>),
     Node(Vec<NodeUpdate>),
-    Proof(Proof),
+    Proof(Proof, Vec<NodeUpdate>),
 }
 
 impl From<Vec<NodeUpdate>> for GroveGdbUpdate {
@@ -54,27 +60,62 @@ impl From<Vec<NodeUpdate>> for GroveGdbUpdate {
     }
 }
 
-impl From<Proof> for GroveGdbUpdate {
-    fn from(value: Proof) -> Self {
-        GroveGdbUpdate::Proof(value)
+// impl From<Proof> for GroveGdbUpdate {
+//     fn from(value: Proof) -> Self {
+//         GroveGdbUpdate::Proof(value)
+//     }
+// }
+
+pub(crate) fn to_proof_tree(
+    proof: grovedbg_types::Proof,
+) -> anyhow::Result<BTreeMap<Vec<Vec<u8>>, ProofSubtree>> {
+    let mut queue = VecDeque::new();
+    queue.push_back((vec![], proof.root_layer));
+
+    let mut tree = BTreeMap::new();
+
+    while let Some((path, proof)) = queue.pop_front() {
+        let subtree_proof = ProofSubtree::from_iter(proof.merk_proof)?;
+        tree.insert(path.clone(), subtree_proof);
+        for (key, lower_proof) in proof.lower_layers.into_iter() {
+            let mut lower_path = path.clone();
+            lower_path.push(key);
+            queue.push_back((lower_path, lower_proof));
+        }
     }
+
+    Ok(tree)
 }
 
-async fn process_command(
-    address: &Url,
+fn fetch_node(
     client: &Client,
-    command: Command,
-) -> Result<GroveGdbUpdate, reqwest::Error> {
+    address: &Url,
+    path: Vec<Vec<u8>>,
+    key: Vec<u8>,
+) -> impl Future<Output = Result<Option<NodeUpdate>, reqwest::Error>> {
+    client
+        .post(format!("{address}fetch_node"))
+        .json(&NodeFetchRequest { path, key })
+        .send()
+        .and_then(|response| response.json::<Option<NodeUpdate>>())
+}
+
+fn fetch_root_node(
+    client: &Client,
+    address: &Url,
+) -> impl Future<Output = Result<Option<NodeUpdate>, reqwest::Error>> {
+    client
+        .post(format!("{address}fetch_root_node"))
+        .json(&RootFetchRequest)
+        .send()
+        .and_then(|response| response.json::<Option<NodeUpdate>>())
+}
+
+async fn process_command(address: &Url, client: &Client, command: Command) -> anyhow::Result<GroveGdbUpdate> {
     match command {
         Command::FetchRoot => {
             log::info!("Fetch GroveDB root node");
-            if let Some(root_node) = client
-                .post(format!("{address}fetch_root_node"))
-                .json(&RootFetchRequest)
-                .send()
-                .and_then(|response| response.json::<Option<NodeUpdate>>())
-                .await?
-            {
+            if let Some(root_node) = fetch_root_node(client, address).await? {
                 Ok(GroveGdbUpdate::RootUpdate(Some(root_node)))
             } else {
                 log::warn!("No root node returned, GroveDB is empty");
@@ -83,16 +124,7 @@ async fn process_command(
         }
         Command::FetchNode { path, key } => {
             log::info!("Fetching a node...");
-            if let Some(node_update) = client
-                .post(format!("{address}fetch_node"))
-                .json(&NodeFetchRequest {
-                    path: path.clone(),
-                    key: key.clone(),
-                })
-                .send()
-                .and_then(|response| response.json::<Option<NodeUpdate>>())
-                .await?
-            {
+            if let Some(node_update) = fetch_node(client, address, path, key).await? {
                 Ok(vec![node_update].into())
             } else {
                 log::warn!("No node returned");
@@ -101,13 +133,22 @@ async fn process_command(
         }
         Command::ProvePathQuery { path_query } => {
             log::info!("Requesting a proof for a path query...");
-            Ok(client
+            let proof = client
                 .post(format!("{address}prove_path_query"))
                 .json(&path_query)
                 .send()
                 .and_then(|response| response.json::<grovedbg_types::Proof>())
-                .await?
-                .into())
+                .await?;
+
+            let proof_tree = to_proof_tree(proof.clone())?;
+            let mut roots = BTreeMap::new();
+            roots.insert(vec![], fetch_root_node(client, address).await?.unwrap().key);
+
+            for (path, proof) in proof_tree.into_iter() {
+                let queue = VecDeque::new();
+            }
+
+            todo!()
         }
         Command::FetchWithPathQuery { path_query } => {
             log::info!(

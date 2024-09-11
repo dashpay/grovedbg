@@ -4,7 +4,7 @@ use grovedbg_types::{Key, NodeUpdate};
 
 use crate::{
     path_ctx::{Path, PathCtx},
-    proof_viewer::{MerkProofOpViewer, ProofTree},
+    proof_viewer::{MerkProofOpViewer, ProofSubtree},
     tree_view::{ElementOrPlaceholder, ElementView, SubtreeElements},
 };
 
@@ -29,17 +29,6 @@ impl SubtreeData {
 }
 
 impl<'pa> TreeData<'pa> {
-    pub(crate) fn build_proof_data(&mut self, proof: grovedbg_types::Proof) {
-        let mut queue = VecDeque::new();
-        queue.push_back((self.path_ctx.get_root(), proof.root_layer));
-
-        let mut proof_data = BTreeMap::new();
-
-        while let Some((path, proof)) = queue.pop_front() {
-            let proof_tree = ProofTree::from_iter(proof.merk_proof);
-        }
-    }
-
     pub(crate) fn new(path_ctx: &'pa PathCtx) -> Self {
         Self {
             path_ctx,
