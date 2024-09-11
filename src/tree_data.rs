@@ -1,10 +1,10 @@
-use std::collections::{btree_map::Entry, BTreeMap, BTreeSet, VecDeque};
+use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 
 use grovedbg_types::{Key, NodeUpdate};
 
 use crate::{
     path_ctx::{Path, PathCtx},
-    proof_viewer::{MerkProofOpViewer, ProofSubtree},
+    proof_viewer::MerkProofOpViewer,
     tree_view::{ElementOrPlaceholder, ElementView, SubtreeElements},
 };
 

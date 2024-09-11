@@ -1,11 +1,12 @@
 use std::collections::{BTreeMap, VecDeque};
 
-use anyhow::{anyhow, Context};
-use grovedbg_types::{MerkProofNode, NodeUpdate};
+use anyhow::{anyhow, bail, Context};
+use grovedbg_types::{Element, MerkProofNode, NodeUpdate};
 use reqwest::{Client, Url};
 
-use super::fetch_root_node;
+use super::{fetch_node, fetch_root_node};
 
+#[derive(Clone, Debug)]
 pub(crate) struct ProofNode {
     pub(crate) left: Option<usize>,
     pub(crate) right: Option<usize>,
@@ -63,11 +64,114 @@ impl<'a> ProofTree<'a> {
         })
     }
 
-    fn fetch_additional_data(&mut self) -> anyhow::Result<()> {
+    async fn fetch_subtree(&mut self, path: Vec<Vec<u8>>) -> anyhow::Result<()> {
+        let mut queue = VecDeque::new();
+        queue.push_back(
+            self.tree
+                .get_mut(&path)
+                .ok_or_else(|| anyhow!("missing subtree"))?
+                .root,
+        );
+
+        while let Some(idx) = queue.pop_front() {
+            let node = self
+                .tree
+                .get_mut(&path)
+                .ok_or_else(|| anyhow!("missing subtree"))?
+                .tree[idx]
+                .clone();
+            node.left.into_iter().for_each(|i| queue.push_back(i));
+            node.right.into_iter().for_each(|i| queue.push_back(i));
+
+            let Some(node_update) = node.node_update.as_ref().cloned() else {
+                bail!("expected node data to be fetched before")
+            };
+
+            if let Some(left_child) = node_update.left_child {
+                let update = fetch_node(self.client, self.address, path.clone(), left_child.clone()).await?;
+                if let Some(NodeUpdate {
+                    element:
+                        Element::Subtree {
+                            root_key: Some(root_key),
+                            ..
+                        }
+                        | Element::Sumtree {
+                            root_key: Some(root_key),
+                            ..
+                        },
+                    ..
+                }) = &update
+                {
+                    let mut new_path = path.clone();
+                    new_path.push(left_child);
+                    if let Some(subtree) = self.tree.get_mut(&new_path) {
+                        subtree.tree[subtree.root].node_update =
+                            fetch_node(self.client, self.address, new_path, root_key.clone()).await?;
+                    };
+                }
+
+                self.tree
+                    .get_mut(&path)
+                    .ok_or_else(|| anyhow!("missing subtree"))?
+                    .tree
+                    .get_mut(
+                        node.left
+                            .ok_or_else(|| anyhow!("proof data diverged from actual state 2"))?,
+                    )
+                    .ok_or_else(|| anyhow!("proof data diverged from actual state 3"))?
+                    .node_update = update;
+            }
+
+            if let Some(right_child) = node_update.right_child {
+                let update = fetch_node(self.client, self.address, path.clone(), right_child.clone()).await?;
+
+                if let Some(NodeUpdate {
+                    element:
+                        Element::Subtree {
+                            root_key: Some(root_key),
+                            ..
+                        }
+                        | Element::Sumtree {
+                            root_key: Some(root_key),
+                            ..
+                        },
+                    ..
+                }) = &update
+                {
+                    let mut new_path = path.clone();
+                    new_path.push(right_child);
+                    if let Some(subtree) = self.tree.get_mut(&new_path) {
+                        subtree.tree[subtree.root].node_update =
+                            fetch_node(self.client, self.address, new_path, root_key.clone()).await?;
+                    };
+                }
+
+                self.tree
+                    .get_mut(&path)
+                    .ok_or_else(|| anyhow!("missing subtree"))?
+                    .tree
+                    .get_mut(
+                        node.right
+                            .ok_or_else(|| anyhow!("proof data diverged from actual state 5"))?,
+                    )
+                    .ok_or_else(|| anyhow!("proof data diverged from actual state 6"))?
+                    .node_update = update;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub(crate) async fn fetch_additional_data(&mut self) -> anyhow::Result<()> {
+        let paths: Vec<_> = self.tree.keys().cloned().collect();
+        for path in paths.into_iter() {
+            self.fetch_subtree(path).await?;
+        }
         Ok(())
     }
 }
 
+#[derive(Clone, Debug)]
 pub(crate) struct ProofSubtree {
     pub(crate) tree: Vec<ProofNode>,
     pub(crate) root: usize,

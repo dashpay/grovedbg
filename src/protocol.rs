@@ -4,10 +4,9 @@ use std::collections::{BTreeMap, VecDeque};
 
 use futures::{Future, TryFutureExt};
 use grovedbg_types::{Key, NodeFetchRequest, NodeUpdate, Path, PathQuery, Proof, RootFetchRequest};
+use proof_tree::ProofTree;
 use reqwest::{Client, Url};
 use tokio::sync::mpsc::{Receiver, Sender};
-
-use crate::proof_viewer::{ProofSubtree, ProofTree};
 
 /// Starts the data exchange process between GroveDBG application and GroveDB's
 /// debugger endpoint.
@@ -58,33 +57,6 @@ impl From<Vec<NodeUpdate>> for GroveGdbUpdate {
     fn from(value: Vec<NodeUpdate>) -> Self {
         GroveGdbUpdate::Node(value)
     }
-}
-
-// impl From<Proof> for GroveGdbUpdate {
-//     fn from(value: Proof) -> Self {
-//         GroveGdbUpdate::Proof(value)
-//     }
-// }
-
-pub(crate) fn to_proof_tree(
-    proof: grovedbg_types::Proof,
-) -> anyhow::Result<BTreeMap<Vec<Vec<u8>>, ProofSubtree>> {
-    let mut queue = VecDeque::new();
-    queue.push_back((vec![], proof.root_layer));
-
-    let mut tree = BTreeMap::new();
-
-    while let Some((path, proof)) = queue.pop_front() {
-        let subtree_proof = ProofSubtree::from_iter(proof.merk_proof)?;
-        tree.insert(path.clone(), subtree_proof);
-        for (key, lower_proof) in proof.lower_layers.into_iter() {
-            let mut lower_path = path.clone();
-            lower_path.push(key);
-            queue.push_back((lower_path, lower_proof));
-        }
-    }
-
-    Ok(tree)
 }
 
 fn fetch_node(
@@ -140,15 +112,17 @@ async fn process_command(address: &Url, client: &Client, command: Command) -> an
                 .and_then(|response| response.json::<grovedbg_types::Proof>())
                 .await?;
 
-            let proof_tree = to_proof_tree(proof.clone())?;
-            let mut roots = BTreeMap::new();
-            roots.insert(vec![], fetch_root_node(client, address).await?.unwrap().key);
+            let mut proof_tree = ProofTree::new(client, address, proof.clone()).await?;
+            proof_tree.fetch_additional_data().await?;
 
-            for (path, proof) in proof_tree.into_iter() {
-                let queue = VecDeque::new();
-            }
+            let updates = proof_tree
+                .tree
+                .into_values()
+                .flat_map(|vals| vals.tree.into_iter())
+                .flat_map(|node| node.node_update)
+                .collect();
 
-            todo!()
+            Ok(GroveGdbUpdate::Proof(proof, updates))
         }
         Command::FetchWithPathQuery { path_query } => {
             log::info!(

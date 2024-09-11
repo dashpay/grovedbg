@@ -380,8 +380,10 @@ impl App for GroveDbgApp {
                             self.tree_data.apply_node_update(update);
                         }
                     }
-                    GroveGdbUpdate::Proof(proof) => {
-                        self.tree_data.build_proof_data(proof.clone());
+                    GroveGdbUpdate::Proof(proof, node_updates) => {
+                        for update in node_updates.into_iter() {
+                            self.tree_data.apply_node_update(update);
+                        }
                         self.proof_viewer = Some(ProofViewer::new(proof));
                         self.show_proof_viewer = true;
                     }
