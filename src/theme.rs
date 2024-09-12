@@ -12,11 +12,14 @@ const ERROR_COLOR_LIGHT: Color32 = Color32::DARK_RED;
 const REFERENCE_COLOR_LIGHT: Color32 = Color32::DARK_BLUE;
 const REFERENCE_COLOR_DARK: Color32 = Color32::LIGHT_BLUE;
 
+const PROOF_NODE_COLOR_LIGHT: Color32 = Color32::from_rgb(143, 0, 179);
+const PROOF_NODE_COLOR_DARK: Color32 = Color32::from_rgb(215, 119, 240);
+
 pub(crate) fn element_to_color(ctx: &Context, element: &ElementOrPlaceholder) -> Color32 {
     if ctx.style().visuals.dark_mode {
         // Dark theme
         match element {
-            ElementOrPlaceholder::Placeholder => Color32::DARK_RED,
+            ElementOrPlaceholder::Placeholder => Color32::RED,
             ElementOrPlaceholder::Element(Element::Item { .. }) => Color32::GRAY,
             ElementOrPlaceholder::Element(Element::SumItem { .. }) => Color32::DARK_GREEN,
             ElementOrPlaceholder::Element(Element::Subtree { .. }) => SUBTREE_COLOR_DARK,
@@ -57,5 +60,13 @@ pub(crate) fn input_error_color(ctx: &Context) -> Color32 {
         ERROR_COLOR_DARK
     } else {
         ERROR_COLOR_LIGHT
+    }
+}
+
+pub(crate) fn proof_node_color(ctx: &Context) -> Color32 {
+    if ctx.style().visuals.dark_mode {
+        PROOF_NODE_COLOR_DARK
+    } else {
+        PROOF_NODE_COLOR_LIGHT
     }
 }

@@ -195,7 +195,7 @@ impl MerkProofNodeViewer {
         node.into()
     }
 
-    fn draw(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn draw(&mut self, ui: &mut egui::Ui) {
         ui.vertical(|ui| {
             match self {
                 MerkProofNodeViewer::Hash(hash) => {

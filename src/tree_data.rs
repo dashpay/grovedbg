@@ -8,10 +8,13 @@ use crate::{
     tree_view::{ElementOrPlaceholder, ElementView, SubtreeElements},
 };
 
+pub(crate) type SubtreeProofData = BTreeMap<Key, MerkProofNodeViewer>;
+pub(crate) type ProofData<'pa> = BTreeMap<Path<'pa>, SubtreeProofData>;
+
 pub(crate) struct TreeData<'pa> {
     path_ctx: &'pa PathCtx,
     data: BTreeMap<Path<'pa>, SubtreeData>,
-    proof_data: Option<BTreeMap<Path<'pa>, BTreeMap<Key, MerkProofNodeViewer>>>,
+    proof_data: ProofData<'pa>,
     merk_selected: Path<'pa>,
 }
 
@@ -34,12 +37,22 @@ impl<'pa> TreeData<'pa> {
             path_ctx,
             data: Default::default(),
             merk_selected: path_ctx.get_root(),
-            proof_data: None,
+            proof_data: Default::default(),
         }
     }
 
-    pub(crate) fn get_merk_selected(&mut self) -> (Path<'pa>, &mut SubtreeData) {
-        (self.merk_selected, self.get(self.merk_selected))
+    pub(crate) fn get_merk_selected(
+        &mut self,
+    ) -> (Path<'pa>, &mut SubtreeData, Option<&mut SubtreeProofData>) {
+        if !self.data.contains_key(&self.merk_selected) {
+            self.get_create_missing_parents(self.merk_selected);
+        }
+
+        (
+            self.merk_selected,
+            self.data.get_mut(&self.merk_selected).unwrap(),
+            self.proof_data.get_mut(&self.merk_selected),
+        )
     }
 
     pub(crate) fn select_for_merk(&mut self, path: Path<'pa>) {
@@ -155,19 +168,17 @@ impl<'pa> TreeData<'pa> {
         &mut self,
         proof_tree: BTreeMap<Vec<Vec<u8>>, BTreeMap<Vec<u8>, grovedbg_types::MerkProofNode>>,
     ) {
-        self.proof_data = Some(
-            proof_tree
-                .into_iter()
-                .map(|(path_vec, proof_subtree)| {
-                    (
-                        self.path_ctx.add_path(path_vec),
-                        proof_subtree
-                            .into_iter()
-                            .map(|(key, proof_node)| (key, proof_node.into()))
-                            .collect(),
-                    )
-                })
-                .collect(),
-        );
+        self.proof_data = proof_tree
+            .into_iter()
+            .map(|(path_vec, proof_subtree)| {
+                (
+                    self.path_ctx.add_path(path_vec),
+                    proof_subtree
+                        .into_iter()
+                        .map(|(key, proof_node)| (key, proof_node.into()))
+                        .collect(),
+                )
+            })
+            .collect();
     }
 }

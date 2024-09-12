@@ -9,7 +9,8 @@ use crate::{
     path_ctx::Path,
     profiles::ActiveProfileSubtreeContext,
     protocol::Command,
-    tree_data::SubtreeData,
+    theme::proof_node_color,
+    tree_data::{SubtreeData, SubtreeProofData},
     tree_view::{ElementView, ElementViewContext, SubtreeElements, NODE_WIDTH},
     CommandsSender, FocusedSubree,
 };
@@ -61,11 +62,12 @@ impl MerkView {
         }
     }
 
-    fn draw_node(
+    fn draw_node<'pd>(
         &mut self,
         ctx: &Context,
         rect: Rect,
         subtree_data: &mut SubtreeData,
+        mut subtree_proof_data: &mut Option<&mut SubtreeProofData>,
         path: Path,
         element_view_context: &mut ElementViewContext,
         key: Key,
@@ -80,24 +82,41 @@ impl MerkView {
             .fixed_pos(coords)
             .show(ctx, |area| {
                 area.set_clip_rect(self.transform.inverse() * rect);
+                let color = subtree_proof_data
+                    .as_ref()
+                    .and_then(|pd| pd.contains_key(&key).then(|| proof_node_color(ctx)))
+                    .unwrap_or(Color32::DARK_GRAY);
 
                 let mut center_bottom = egui::Frame::default()
                     .rounding(egui::Rounding::same(4.0))
                     .inner_margin(egui::Margin::same(INNER_MARGIN))
-                    .stroke(Stroke {
-                        width: 1.,
-                        color: Color32::DARK_GRAY,
-                    })
+                    .stroke(Stroke { width: 1., color })
                     .show(area, |node_ui| {
                         node_ui.set_max_width(NODE_WIDTH);
 
                         element_view.draw(node_ui, element_view_context);
+
+                        if let Some(proof_node) = subtree_proof_data.as_mut().and_then(|s| s.get_mut(&key)) {
+                            node_ui.separator();
+                            proof_node.draw(node_ui);
+                        }
 
                         node_ui.separator();
 
                         let left_button = Button::new(egui_phosphor::regular::ARROW_LEFT);
                         node_ui.horizontal(|line| {
                             if let Some(left) = element_view.left_child.as_ref() {
+                                if subtree_proof_data
+                                    .as_ref()
+                                    .map(|p| p.contains_key(left))
+                                    .unwrap_or_default()
+                                {
+                                    subtree_data
+                                        .elements
+                                        .entry(left.clone())
+                                        .or_insert_with(|| ElementView::new_placeholder(left.clone()))
+                                        .merk_visible = true;
+                                }
                                 if line
                                     .add(left_button)
                                     .on_hover_text("Fetch and show left child")
@@ -126,6 +145,17 @@ impl MerkView {
 
                             let right_button = Button::new(egui_phosphor::regular::ARROW_RIGHT);
                             if let Some(right) = element_view.right_child.as_ref() {
+                                if subtree_proof_data
+                                    .as_mut()
+                                    .map(|p| p.contains_key(right))
+                                    .unwrap_or_default()
+                                {
+                                    subtree_data
+                                        .elements
+                                        .entry(right.clone())
+                                        .or_insert_with(|| ElementView::new_placeholder(right.clone()))
+                                        .merk_visible = true;
+                                }
                                 if line
                                     .add(right_button)
                                     .on_hover_text("Fetch and show right child")
@@ -236,6 +266,7 @@ impl MerkView {
         ui: &mut egui::Ui,
         path: Path<'pa>,
         subtree_data: &mut SubtreeData,
+        mut subtree_proof_data: Option<&mut SubtreeProofData>,
         mut profile_ctx: ActiveProfileSubtreeContext,
         focus_subtree: &mut Option<FocusedSubree<'pa>>,
     ) {
@@ -320,6 +351,7 @@ impl MerkView {
                 ui.ctx(),
                 rect,
                 subtree_data,
+                &mut subtree_proof_data,
                 path,
                 &mut element_view_context,
                 key,

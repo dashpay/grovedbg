@@ -314,11 +314,12 @@ impl GroveDbgApp {
                     egui::Frame::default()
                         .outer_margin(PANEL_MARGIN)
                         .show(ui, |frame| {
-                            let (path, subtree_data) = self.tree_data.get_merk_selected();
+                            let (path, subtree_data, subtree_proof_data) = self.tree_data.get_merk_selected();
                             self.merk_view.draw(
                                 frame,
                                 path,
                                 subtree_data,
+                                subtree_proof_data,
                                 self.profiles_view.active_profile_root_ctx().fast_forward(path),
                                 &mut self.tree_view.auto_focus,
                             );
