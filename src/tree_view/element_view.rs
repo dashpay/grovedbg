@@ -8,7 +8,9 @@ use super::{ElementViewContext, NODE_WIDTH};
 use crate::{
     bytes_utils::{binary_label, binary_label_colored, bytes_by_display_variant, BytesDisplayVariant},
     path_ctx::{full_path_display, full_path_display_iter},
+    protocol::Command,
     theme::element_to_color,
+    CommandsSender,
 };
 
 const ELEMENT_HEIGHT: f32 = 20.;
@@ -97,6 +99,19 @@ impl ElementView {
 
         // Draw key
         ui.horizontal(|key_line| {
+            if key_line
+                .button(egui_phosphor::regular::ARROW_CLOCKWISE)
+                .on_hover_text("Refetch the node")
+                .clicked()
+            {
+                let _ = element_view_context
+                    .commands_sender
+                    .blocking_send(Command::FetchNode {
+                        path: element_view_context.path().to_vec(),
+                        key: self.key.clone(),
+                    })
+                    .inspect_err(|_| log::error!("Unable to reach GroveDBG protocol thread"));
+            }
             if key_line
                 .button(egui_phosphor::regular::HASH)
                 .on_hover_text("Show item hashes received from GroveDB")

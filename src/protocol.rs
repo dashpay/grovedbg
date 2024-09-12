@@ -1,9 +1,11 @@
 mod proof_tree;
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::BTreeMap;
 
 use futures::{Future, TryFutureExt};
-use grovedbg_types::{Key, NodeFetchRequest, NodeUpdate, Path, PathQuery, Proof, RootFetchRequest};
+use grovedbg_types::{
+    Key, MerkProofNode, NodeFetchRequest, NodeUpdate, Path, PathQuery, Proof, RootFetchRequest,
+};
 use proof_tree::ProofTree;
 use reqwest::{Client, Url};
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -50,7 +52,11 @@ pub enum Command {
 pub enum GroveGdbUpdate {
     RootUpdate(Option<NodeUpdate>),
     Node(Vec<NodeUpdate>),
-    Proof(Proof, Vec<NodeUpdate>),
+    Proof(
+        Proof,
+        Vec<NodeUpdate>,
+        BTreeMap<Vec<Vec<u8>>, BTreeMap<Key, MerkProofNode>>,
+    ),
 }
 
 impl From<Vec<NodeUpdate>> for GroveGdbUpdate {
@@ -117,12 +123,19 @@ async fn process_command(address: &Url, client: &Client, command: Command) -> an
 
             let updates = proof_tree
                 .tree
+                .clone()
                 .into_values()
                 .flat_map(|vals| vals.tree.into_iter())
                 .flat_map(|node| node.node_update)
                 .collect();
 
-            Ok(GroveGdbUpdate::Proof(proof, updates))
+            let tree_proof_data: BTreeMap<_, _> = proof_tree
+                .tree
+                .into_iter()
+                .map(|(k, v)| (k, v.to_proof_tree_data()))
+                .collect();
+
+            Ok(GroveGdbUpdate::Proof(proof, updates, tree_proof_data))
         }
         Command::FetchWithPathQuery { path_query } => {
             log::info!(

@@ -4,14 +4,14 @@ use grovedbg_types::{Key, NodeUpdate};
 
 use crate::{
     path_ctx::{Path, PathCtx},
-    proof_viewer::MerkProofOpViewer,
+    proof_viewer::MerkProofNodeViewer,
     tree_view::{ElementOrPlaceholder, ElementView, SubtreeElements},
 };
 
 pub(crate) struct TreeData<'pa> {
     path_ctx: &'pa PathCtx,
     data: BTreeMap<Path<'pa>, SubtreeData>,
-    proof_data: Option<BTreeMap<Path<'pa>, BTreeMap<Key, MerkProofOpViewer>>>,
+    proof_data: Option<BTreeMap<Path<'pa>, BTreeMap<Key, MerkProofNodeViewer>>>,
     merk_selected: Path<'pa>,
 }
 
@@ -149,5 +149,25 @@ impl<'pa> TreeData<'pa> {
                 }
             };
         }
+    }
+
+    pub(crate) fn set_proof_tree(
+        &mut self,
+        proof_tree: BTreeMap<Vec<Vec<u8>>, BTreeMap<Vec<u8>, grovedbg_types::MerkProofNode>>,
+    ) {
+        self.proof_data = Some(
+            proof_tree
+                .into_iter()
+                .map(|(path_vec, proof_subtree)| {
+                    (
+                        self.path_ctx.add_path(path_vec),
+                        proof_subtree
+                            .into_iter()
+                            .map(|(key, proof_node)| (key, proof_node.into()))
+                            .collect(),
+                    )
+                })
+                .collect(),
+        );
     }
 }

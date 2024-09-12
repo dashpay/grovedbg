@@ -1,8 +1,4 @@
-use std::collections::{BTreeMap, VecDeque};
-
-use anyhow::{anyhow, Context};
 use eframe::egui::{self, CollapsingHeader, ScrollArea};
-use grovedbg_types::NodeUpdate;
 
 use crate::bytes_utils::BytesView;
 
@@ -138,7 +134,7 @@ impl MerkProofOpViewer {
     }
 }
 
-enum MerkProofNodeViewer {
+pub(crate) enum MerkProofNodeViewer {
     Hash(BytesView),
     KVHash(BytesView),
     KVDigest(BytesView, BytesView),

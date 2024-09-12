@@ -20,16 +20,14 @@ pub(crate) type SubtreeElements = BTreeMap<Key, ElementView>;
 
 pub(crate) struct SubtreeView<'pa> {
     pub(super) path: Path<'pa>,
-    commands_sender: CommandsSender,
     page_index: usize,
     width: usize,
 }
 
 impl<'pa> SubtreeView<'pa> {
-    pub(crate) fn new(commands_sender: CommandsSender, path: Path<'pa>) -> Self {
+    pub(crate) fn new(path: Path<'pa>) -> Self {
         Self {
             path,
-            commands_sender,
             page_index: 0,
             width: 1,
         }
@@ -47,9 +45,8 @@ impl<'pa> SubtreeView<'pa> {
         self.page_index = index / KV_PER_PAGE;
     }
 
-    fn fetch(&self, limit: Option<u16>) {
-        let _ = self
-            .commands_sender
+    fn fetch(&self, commands_sender: &CommandsSender, limit: Option<u16>) {
+        let _ = commands_sender
             .blocking_send(Command::FetchWithPathQuery {
                 path_query: PathQuery {
                     path: self.path.to_vec(),
@@ -71,17 +68,16 @@ impl<'pa> SubtreeView<'pa> {
             .inspect_err(|_| log::error!("Unable to reach GroveDBG protocol thread"));
     }
 
-    fn fetch_n(&self, n: u16) {
-        self.fetch(Some(n))
+    fn fetch_n(&self, commands_sender: &CommandsSender, n: u16) {
+        self.fetch(commands_sender, Some(n))
     }
 
-    fn fetch_all(&self) {
-        self.fetch(None)
+    fn fetch_all(&self, commands_sender: &CommandsSender) {
+        self.fetch(commands_sender, None)
     }
 
-    fn fetch_key(&self, key: Vec<u8>) {
-        let _ = self
-            .commands_sender
+    fn fetch_key(&self, commands_sender: &CommandsSender, key: Vec<u8>) {
+        let _ = commands_sender
             .blocking_send(Command::FetchNode {
                 path: self.path.to_vec(),
                 key,
@@ -100,13 +96,18 @@ impl<'pa> SubtreeView<'pa> {
     }
 
     /// Draw subtree control buttons
-    fn draw_controls(&mut self, ui: &mut egui::Ui, tree_data: &mut TreeData<'pa>) {
+    fn draw_controls(
+        &mut self,
+        ui: &mut egui::Ui,
+        commands_sender: &CommandsSender,
+        tree_data: &mut TreeData<'pa>,
+    ) {
         ui.horizontal(|controls_ui| {
             let subtree_data = tree_data.get(self.path);
             let root_key = subtree_data.root_key.clone();
 
             if controls_ui.button("10").on_hover_text("Fetch 10 items").clicked() {
-                self.fetch_n(10);
+                self.fetch_n(commands_sender, 10);
             }
 
             if controls_ui
@@ -114,7 +115,7 @@ impl<'pa> SubtreeView<'pa> {
                 .on_hover_text("Fetch 100 items")
                 .clicked()
             {
-                self.fetch_n(100);
+                self.fetch_n(commands_sender, 100);
             }
 
             if controls_ui
@@ -122,7 +123,7 @@ impl<'pa> SubtreeView<'pa> {
                 .on_hover_text("Fetch whole subtree")
                 .clicked()
             {
-                self.fetch_all();
+                self.fetch_all(commands_sender);
             }
 
             if let Some(key) = subtree_data.root_key.as_ref() {
@@ -131,7 +132,7 @@ impl<'pa> SubtreeView<'pa> {
                     .on_hover_text("Fetch root node data")
                     .clicked()
                 {
-                    self.fetch_key(key.clone());
+                    self.fetch_key(commands_sender, key.clone());
                 }
             }
 
@@ -160,8 +161,7 @@ impl<'pa> SubtreeView<'pa> {
                     .clicked()
                 {
                     tree_data.select_for_merk(self.path);
-                    let _ = self
-                        .commands_sender
+                    let _ = commands_sender
                         .blocking_send(Command::FetchNode {
                             path: self.path.to_vec(),
                             key: key.clone(),
@@ -173,10 +173,10 @@ impl<'pa> SubtreeView<'pa> {
     }
 
     /// Draw elements of the subtree as a list
-    fn draw_elements<'af, 'pf>(
+    fn draw_elements<'af, 'pf, 'cs>(
         &mut self,
         ui: &mut egui::Ui,
-        subtree_view_ctx: &mut SubtreeViewContext<'af, 'pf, 'pa>,
+        subtree_view_ctx: &mut SubtreeViewContext<'af, 'pf, 'pa, 'cs>,
         subtree_data: &mut SubtreeData,
     ) {
         let mut element_view_ctx = subtree_view_ctx.element_view_context(self.path);
@@ -240,9 +240,9 @@ impl<'pa> SubtreeView<'pa> {
     }
 
     /// Draw a subtree list view
-    pub(crate) fn draw<'af, 'pf>(
+    pub(crate) fn draw<'af, 'pf, 'cs>(
         &mut self,
-        mut subtree_view_ctx: SubtreeViewContext<'af, 'pf, 'pa>,
+        mut subtree_view_ctx: SubtreeViewContext<'af, 'pf, 'pa, 'cs>,
         ui: &mut egui::Ui,
         tree_data: &mut TreeData<'pa>,
         subtrees: &mut BTreeMap<Path<'pa>, SubtreeView<'pa>>,
@@ -270,7 +270,7 @@ impl<'pa> SubtreeView<'pa> {
                     })
                     .show(area, |subtree_ui| {
                         subtree_ui.set_max_width(NODE_WIDTH);
-                        self.draw_controls(subtree_ui, tree_data);
+                        self.draw_controls(subtree_ui, &subtree_view_ctx.commands_sender, tree_data);
                         subtree_ui.separator();
 
                         path_label(subtree_ui, self.path, &subtree_view_ctx.profile_ctx);
@@ -305,9 +305,7 @@ impl<'pa> SubtreeView<'pa> {
                     path.visible().then(|| {
                         subtrees
                             .entry(path)
-                            .or_insert_with(|| {
-                                SubtreeView::new(self.commands_sender.clone(), self.path.child(k.clone()))
-                            })
+                            .or_insert_with(|| SubtreeView::new(self.path.child(k.clone())))
                             .width
                     })
                 })

@@ -80,14 +80,16 @@ impl<'a> ProofTree<'a> {
                 .ok_or_else(|| anyhow!("missing subtree"))?
                 .tree[idx]
                 .clone();
-            node.left.into_iter().for_each(|i| queue.push_back(i));
-            node.right.into_iter().for_each(|i| queue.push_back(i));
 
             let Some(node_update) = node.node_update.as_ref().cloned() else {
                 bail!("expected node data to be fetched before")
             };
 
-            if let Some(left_child) = node_update.left_child {
+            if let Some(proof_left) = node.left {
+                queue.push_back(proof_left);
+                let Some(left_child) = node_update.left_child else {
+                    bail!("proof tree contains left child, but actual data doesn't")
+                };
                 let update = fetch_node(self.client, self.address, path.clone(), left_child.clone()).await?;
                 if let Some(NodeUpdate {
                     element:
@@ -114,17 +116,17 @@ impl<'a> ProofTree<'a> {
                     .get_mut(&path)
                     .ok_or_else(|| anyhow!("missing subtree"))?
                     .tree
-                    .get_mut(
-                        node.left
-                            .ok_or_else(|| anyhow!("proof data diverged from actual state 2"))?,
-                    )
+                    .get_mut(proof_left)
                     .ok_or_else(|| anyhow!("proof data diverged from actual state 3"))?
                     .node_update = update;
             }
 
-            if let Some(right_child) = node_update.right_child {
+            if let Some(proof_right) = node.right {
+                queue.push_back(proof_right);
+                let Some(right_child) = node_update.right_child else {
+                    bail!("proof tree contains right child, but actual data doesn't")
+                };
                 let update = fetch_node(self.client, self.address, path.clone(), right_child.clone()).await?;
-
                 if let Some(NodeUpdate {
                     element:
                         Element::Subtree {
@@ -150,11 +152,8 @@ impl<'a> ProofTree<'a> {
                     .get_mut(&path)
                     .ok_or_else(|| anyhow!("missing subtree"))?
                     .tree
-                    .get_mut(
-                        node.right
-                            .ok_or_else(|| anyhow!("proof data diverged from actual state 5"))?,
-                    )
-                    .ok_or_else(|| anyhow!("proof data diverged from actual state 6"))?
+                    .get_mut(proof_right)
+                    .ok_or_else(|| anyhow!("proof data diverged from actual state 3"))?
                     .node_update = update;
             }
         }
@@ -178,6 +177,19 @@ pub(crate) struct ProofSubtree {
 }
 
 impl ProofSubtree {
+    pub(crate) fn to_proof_tree_data(self) -> BTreeMap<Vec<u8>, grovedbg_types::MerkProofNode> {
+        self.tree
+            .into_iter()
+            .filter_map(
+                |ProofNode {
+                     proof_value,
+                     node_update,
+                     ..
+                 }| node_update.map(|NodeUpdate { key, .. }| (key, proof_value)),
+            )
+            .collect()
+    }
+
     pub(crate) fn from_iter<I>(iter: I) -> anyhow::Result<Self>
     where
         I: IntoIterator<Item = grovedbg_types::MerkProofOp>,
