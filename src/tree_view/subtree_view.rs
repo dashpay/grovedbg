@@ -82,12 +82,12 @@ impl<'pa> SubtreeView<'pa> {
     }
 
     fn next_page(&mut self, ctx: &mut SubtreeViewContext) {
-        ctx.drop_focus();
+        ctx.bus.user_action(UserAction::DropFocus);
         self.page_index += 1;
     }
 
     fn prev_page(&mut self, ctx: &mut SubtreeViewContext) {
-        ctx.drop_focus();
+        ctx.bus.user_action(UserAction::DropFocus);
         self.page_index = self.page_index.saturating_sub(1);
     }
 
@@ -161,7 +161,7 @@ impl<'pa> SubtreeView<'pa> {
     fn draw_elements<'af, 'pf, 'cs>(
         &mut self,
         ui: &mut egui::Ui,
-        subtree_view_ctx: &mut SubtreeViewContext<'af, 'pf, 'pa, 'cs>,
+        subtree_view_ctx: &mut SubtreeViewContext<'pf, 'pa, 'cs>,
         subtree_data: &mut SubtreeData,
     ) {
         let mut element_view_ctx = subtree_view_ctx.element_view_context(self.path);
@@ -225,9 +225,9 @@ impl<'pa> SubtreeView<'pa> {
     }
 
     /// Draw a subtree list view
-    pub(crate) fn draw<'af, 'pf, 'cs>(
+    pub(crate) fn draw<'pf, 'cs>(
         &mut self,
-        mut subtree_view_ctx: SubtreeViewContext<'af, 'pf, 'pa, 'cs>,
+        mut subtree_view_ctx: SubtreeViewContext<'pf, 'pa, 'cs>,
         ui: &mut egui::Ui,
         tree_data: &mut TreeData<'pa>,
         subtrees: &mut BTreeMap<Path<'pa>, SubtreeView<'pa>>,

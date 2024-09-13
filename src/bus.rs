@@ -16,6 +16,7 @@ pub(crate) struct CommandBus<'pa> {
 pub(crate) enum UserAction<'pa> {
     FocusSubtree(Path<'pa>),
     FocusSubtreeKey(Path<'pa>, Key),
+    DropFocus,
     SelectMerkView(Path<'pa>),
 }
 

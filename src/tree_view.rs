@@ -12,7 +12,7 @@ pub(crate) use subtree_view::SubtreeElements;
 use subtree_view::SubtreeView;
 
 use crate::{
-    bus::CommandBus,
+    bus::{CommandBus, UserAction},
     path_ctx::{Path, PathCtx},
     profiles::{ActiveProfileSubtreeContext, RootActiveProfileContext},
     tree_data::TreeData,
@@ -23,7 +23,6 @@ pub(crate) const NODE_WIDTH: f32 = 300.;
 
 pub(crate) struct TreeView<'pa> {
     transform: TSTransform,
-    pub(super) auto_focus: Option<FocusedSubree<'pa>>,
     pub(super) subtrees: BTreeMap<Path<'pa>, SubtreeView<'pa>>,
     path_ctx: &'pa PathCtx,
 }
@@ -36,19 +35,19 @@ impl<'pa> TreeView<'pa> {
 
         Self {
             transform: TSTransform::default(),
-            auto_focus: None,
             subtrees,
             path_ctx,
         }
     }
 
-    pub(crate) fn draw<'pf, 'b>(
+    pub(crate) fn draw<'pf, 'b, 'af>(
         &mut self,
         ui: &mut egui::Ui,
         bus: &'b CommandBus<'pa>,
         merk_panel_width: f32,
         root_profile_ctx: RootActiveProfileContext<'pf>,
         tree_data: &mut TreeData<'pa>,
+        focused_subtree: &'af Option<FocusedSubree<'pa>>,
     ) {
         let (id, rect) = ui.allocate_space(ui.available_size());
 
@@ -81,10 +80,10 @@ impl<'pa> TreeView<'pa> {
         }
 
         if transform_before != self.transform {
-            self.auto_focus = None;
+            bus.user_action(UserAction::DropFocus);
         }
 
-        if let Some(FocusedSubree { path, key }) = &self.auto_focus {
+        if let Some(FocusedSubree { path, key }) = focused_subtree {
             // Show focused subtree
             path.for_segments(|segments_iter| {
                 let mut current_path = path.get_root();
@@ -112,14 +111,8 @@ impl<'pa> TreeView<'pa> {
             }
         }
 
-        let subtree_view_ctx = SubtreeViewContext::new_root(
-            ui.ctx().clone(),
-            &mut self.auto_focus,
-            self.transform,
-            rect,
-            root_profile_ctx,
-            bus,
-        );
+        let subtree_view_ctx =
+            SubtreeViewContext::new_root(ui.ctx().clone(), self.transform, rect, root_profile_ctx, bus);
 
         if let Some(mut root) = self.subtrees.remove(&self.path_ctx.get_root()) {
             root.draw(
@@ -135,8 +128,7 @@ impl<'pa> TreeView<'pa> {
     }
 }
 
-pub(crate) struct SubtreeViewContext<'af, 'pf, 'pa, 'b> {
-    auto_focus: &'af mut Option<FocusedSubree<'pa>>,
+pub(crate) struct SubtreeViewContext<'pf, 'pa, 'b> {
     transform: TSTransform,
     rect: Rect,
     context: Context,
@@ -144,17 +136,15 @@ pub(crate) struct SubtreeViewContext<'af, 'pf, 'pa, 'b> {
     bus: &'b CommandBus<'pa>,
 }
 
-impl<'af, 'pf, 'pa, 'b> SubtreeViewContext<'af, 'pf, 'pa, 'b> {
+impl<'pf, 'pa, 'b> SubtreeViewContext<'pf, 'pa, 'b> {
     pub(crate) fn new_root(
         context: Context,
-        auto_focus: &'af mut Option<FocusedSubree<'pa>>,
         transform: TSTransform,
         rect: Rect,
         root_profile_ctx: RootActiveProfileContext<'pf>,
         bus: &'b CommandBus<'pa>,
     ) -> Self {
         Self {
-            auto_focus,
             transform,
             rect,
             context,
@@ -163,13 +153,8 @@ impl<'af, 'pf, 'pa, 'b> SubtreeViewContext<'af, 'pf, 'pa, 'b> {
         }
     }
 
-    pub(crate) fn drop_focus(&mut self) {
-        *self.auto_focus = None;
-    }
-
-    pub(crate) fn child<'s>(&'s mut self, key: Vec<u8>) -> SubtreeViewContext<'s, 'pf, 'pa, 'b> {
+    pub(crate) fn child(&mut self, key: Vec<u8>) -> SubtreeViewContext<'pf, 'pa, 'b> {
         SubtreeViewContext {
-            auto_focus: &mut self.auto_focus,
             rect: self.rect,
             transform: self.transform,
             context: self.context.clone(),
@@ -184,7 +169,6 @@ impl<'af, 'pf, 'pa, 'b> SubtreeViewContext<'af, 'pf, 'pa, 'b> {
     ) -> ElementViewContext<'sc, 'pa, 'pf, 'b> {
         ElementViewContext {
             path,
-            focus_subtree: self.auto_focus,
             profile_ctx: &mut self.profile_ctx,
             bus: self.bus,
         }
@@ -193,22 +177,22 @@ impl<'af, 'pf, 'pa, 'b> SubtreeViewContext<'af, 'pf, 'pa, 'b> {
 
 pub(crate) struct ElementViewContext<'af, 'pa, 'pf, 'b> {
     pub(crate) path: Path<'pa>,
-    pub(crate) focus_subtree: &'af mut Option<FocusedSubree<'pa>>,
     pub(crate) profile_ctx: &'af mut ActiveProfileSubtreeContext<'pf>,
     pub(crate) bus: &'b CommandBus<'pa>,
 }
 
 impl<'af, 'pa, 'pf, 'cs> ElementViewContext<'af, 'pa, 'pf, 'cs> {
     pub(crate) fn focus_child_subtree(&mut self, key: Vec<u8>) {
-        let child_path = self.path.child(key);
-        *self.focus_subtree = Some(FocusedSubree {
-            path: child_path,
-            key: None,
-        });
+        self.bus
+            .user_action(UserAction::FocusSubtree(self.path.child(key)));
     }
 
     pub(crate) fn focus(&mut self, path: Path<'pa>, key: Option<Vec<u8>>) {
-        *self.focus_subtree = Some(FocusedSubree { path, key });
+        if let Some(key) = key {
+            self.bus.user_action(UserAction::FocusSubtreeKey(path, key));
+        } else {
+            self.bus.user_action(UserAction::FocusSubtree(path));
+        }
     }
 
     pub(crate) fn path(&self) -> Path<'pa> {

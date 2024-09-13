@@ -103,6 +103,7 @@ struct GroveDbgApp {
     show_log: bool,
     show_merk_view: bool,
     merk_panel_width: f32,
+    focused_subtree: Option<FocusedSubree<'static>>,
 }
 
 const SHOW_QUERY_BUILDER_KEY: &'static str = "show_query_builder";
@@ -153,6 +154,7 @@ impl GroveDbgApp {
                 .and_then(|param| param.parse::<bool>().ok())
                 .unwrap_or(true),
             merk_panel_width: 0.,
+            focused_subtree: None,
         }
     }
 
@@ -175,8 +177,7 @@ impl GroveDbgApp {
                     egui::Frame::default()
                         .outer_margin(PANEL_MARGIN)
                         .show(ui, |frame| {
-                            self.profiles_view
-                                .draw(frame, self.path_ctx, &mut self.tree_view.auto_focus);
+                            self.profiles_view.draw(frame, &self.bus, self.path_ctx);
                         });
                 } else {
                     if ui
@@ -324,7 +325,6 @@ impl GroveDbgApp {
                                 subtree_data,
                                 subtree_proof_data,
                                 self.profiles_view.active_profile_root_ctx().fast_forward(path),
-                                &mut self.tree_view.auto_focus,
                             );
                         });
                 } else {
@@ -427,12 +427,30 @@ impl App for GroveDbgApp {
                 self.merk_panel_width / 2.,
                 self.profiles_view.active_profile_root_ctx(),
                 &mut self.tree_data,
+                &self.focused_subtree,
             );
         });
 
         self.bus.process_actions(|action| match action {
-            bus::UserAction::FocusSubtree(_) => todo!(),
-            bus::UserAction::FocusSubtreeKey(..) => todo!(),
+            bus::UserAction::FocusSubtree(path) => {
+                if let Some((parent_path, parent_key)) = path.parent_with_key() {
+                    self.bus.protocol_command(ProtocolCommand::FetchNode {
+                        path: parent_path.to_vec(),
+                        key: parent_key,
+                    })
+                }
+                self.focused_subtree = Some(FocusedSubree { path, key: None })
+            }
+            bus::UserAction::FocusSubtreeKey(path, key) => {
+                if let Some((parent_path, parent_key)) = path.parent_with_key() {
+                    self.bus.protocol_command(ProtocolCommand::FetchNode {
+                        path: parent_path.to_vec(),
+                        key: parent_key,
+                    })
+                }
+                self.focused_subtree = Some(FocusedSubree { path, key: Some(key) })
+            }
+            bus::UserAction::DropFocus => self.focused_subtree = None,
             bus::UserAction::SelectMerkView(path) => {
                 let key = self.tree_data.get(path).root_key.as_ref().cloned();
                 if let Some(key) = key {
@@ -450,7 +468,7 @@ impl App for GroveDbgApp {
     }
 }
 
-pub(crate) struct FocusedSubree<'p> {
-    pub path: Path<'p>,
+pub(crate) struct FocusedSubree<'pa> {
+    pub path: Path<'pa>,
     pub key: Option<Key>,
 }

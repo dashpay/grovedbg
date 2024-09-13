@@ -13,7 +13,6 @@ use crate::{
     theme::proof_node_color,
     tree_data::{SubtreeData, SubtreeProofData},
     tree_view::{ElementView, ElementViewContext, SubtreeElements, NODE_WIDTH},
-    FocusedSubree,
 };
 
 const INNER_MARGIN: f32 = 8.;
@@ -259,7 +258,6 @@ impl MerkView {
         subtree_data: &mut SubtreeData,
         mut subtree_proof_data: Option<&mut SubtreeProofData>,
         mut profile_ctx: ActiveProfileSubtreeContext,
-        focus_subtree: &mut Option<FocusedSubree<'pa>>,
     ) {
         let Some(root_key) = subtree_data.root_key.clone() else {
             return;
@@ -329,7 +327,6 @@ impl MerkView {
 
         let mut element_view_context = ElementViewContext {
             path,
-            focus_subtree,
             profile_ctx: &mut profile_ctx,
             bus,
         };
