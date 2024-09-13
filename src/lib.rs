@@ -2,6 +2,7 @@
 
 #![deny(missing_docs)]
 
+mod bus;
 mod bytes_utils;
 mod help;
 mod merk_view;
@@ -16,6 +17,7 @@ mod tree_view;
 
 use std::time::Duration;
 
+use bus::CommandBus;
 use eframe::{
     egui::{self, Context, Style, Visuals},
     App, CreationContext, Storage,
@@ -26,7 +28,7 @@ use path_ctx::{Path, PathCtx};
 use profiles::ProfilesView;
 use proof_viewer::ProofViewer;
 pub use protocol::start_grovedbg_protocol;
-use protocol::{Command, GroveGdbUpdate};
+use protocol::{GroveGdbUpdate, ProtocolCommand};
 use query_builder::QueryBuilder;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tree_data::TreeData;
@@ -35,13 +37,13 @@ use tree_view::TreeView;
 const PANEL_MARGIN: f32 = 5.;
 const DARK_THEME_KEY: &'static str = "dark_theme";
 
-type CommandsSender = Sender<Command>;
+type ProtocolSender = Sender<ProtocolCommand>;
 type UpdatesReceiver = Receiver<GroveGdbUpdate>;
 
 /// Starts the GroveDBG application.
 pub fn start_grovedbg_app(
     cc: &CreationContext,
-    commands_sender: CommandsSender,
+    protocol_sender: ProtocolSender,
     updates_receiver: UpdatesReceiver,
 ) -> Box<dyn App> {
     let mut fonts = egui::FontDefinitions::default();
@@ -70,13 +72,13 @@ pub fn start_grovedbg_app(
 
     let path_ctx = Box::leak(Box::new(PathCtx::new()));
 
-    let _ = commands_sender
-        .blocking_send(Command::FetchRoot)
-        .inspect_err(|_| log::error!("Unable to reach GroveDBG protocol thread"));
+    let bus = CommandBus::new(protocol_sender);
+
+    bus.protocol_command(ProtocolCommand::FetchRoot);
 
     Box::new(GroveDbgApp::new(
         cc.storage,
-        commands_sender,
+        bus,
         updates_receiver,
         path_ctx,
         dark_theme,
@@ -84,7 +86,7 @@ pub fn start_grovedbg_app(
 }
 
 struct GroveDbgApp {
-    commands_sender: CommandsSender,
+    bus: CommandBus<'static>,
     updates_receiver: UpdatesReceiver,
     path_ctx: &'static PathCtx,
     query_builder: QueryBuilder,
@@ -113,15 +115,15 @@ const PROFILES_KEY: &'static str = "profiles";
 impl GroveDbgApp {
     fn new(
         storage: Option<&dyn Storage>,
-        commands_sender: CommandsSender,
+        bus: CommandBus<'static>,
         updates_receiver: UpdatesReceiver,
         path_ctx: &'static PathCtx,
         dark_theme: bool,
     ) -> Self {
         GroveDbgApp {
-            tree_view: TreeView::new(commands_sender.clone(), path_ctx),
-            merk_view: MerkView::new(commands_sender.clone()),
-            commands_sender,
+            tree_view: TreeView::new(path_ctx),
+            merk_view: MerkView::new(),
+            bus,
             updates_receiver,
             path_ctx,
             query_builder: QueryBuilder::new(),
@@ -211,7 +213,7 @@ impl GroveDbgApp {
                                 frame,
                                 &self.path_ctx,
                                 self.profiles_view.active_profile_root_ctx(),
-                                &self.commands_sender,
+                                &self.bus,
                             );
                         });
                 } else {
@@ -317,6 +319,7 @@ impl GroveDbgApp {
                             let (path, subtree_data, subtree_proof_data) = self.tree_data.get_merk_selected();
                             self.merk_view.draw(
                                 frame,
+                                &self.bus,
                                 path,
                                 subtree_data,
                                 subtree_proof_data,
@@ -420,10 +423,26 @@ impl App for GroveDbgApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             self.tree_view.draw(
                 ui,
+                &self.bus,
                 self.merk_panel_width / 2.,
                 self.profiles_view.active_profile_root_ctx(),
                 &mut self.tree_data,
             );
+        });
+
+        self.bus.process_actions(|action| match action {
+            bus::UserAction::FocusSubtree(_) => todo!(),
+            bus::UserAction::FocusSubtreeKey(..) => todo!(),
+            bus::UserAction::SelectMerkView(path) => {
+                let key = self.tree_data.get(path).root_key.as_ref().cloned();
+                if let Some(key) = key {
+                    self.tree_data.select_for_merk(path);
+                    self.bus.protocol_command(ProtocolCommand::FetchNode {
+                        path: path.to_vec(),
+                        key,
+                    });
+                }
+            }
         });
 
         self.dark_theme = ctx.style().visuals.dark_mode;

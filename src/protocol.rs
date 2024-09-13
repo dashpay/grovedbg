@@ -14,7 +14,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 /// debugger endpoint.
 pub async fn start_grovedbg_protocol(
     address: Url,
-    mut commands_receiver: Receiver<Command>,
+    mut commands_receiver: Receiver<ProtocolCommand>,
     updates_sender: Sender<GroveGdbUpdate>,
 ) {
     let client = Client::new();
@@ -41,7 +41,7 @@ pub async fn start_grovedbg_protocol(
 }
 
 /// Background tasks of GroveDBG application
-pub enum Command {
+pub enum ProtocolCommand {
     FetchRoot,
     FetchNode { path: Path, key: Key },
     ProvePathQuery { path_query: PathQuery },
@@ -89,9 +89,13 @@ fn fetch_root_node(
         .and_then(|response| response.json::<Option<NodeUpdate>>())
 }
 
-async fn process_command(address: &Url, client: &Client, command: Command) -> anyhow::Result<GroveGdbUpdate> {
+async fn process_command(
+    address: &Url,
+    client: &Client,
+    command: ProtocolCommand,
+) -> anyhow::Result<GroveGdbUpdate> {
     match command {
-        Command::FetchRoot => {
+        ProtocolCommand::FetchRoot => {
             log::info!("Fetch GroveDB root node");
             if let Some(root_node) = fetch_root_node(client, address).await? {
                 Ok(GroveGdbUpdate::RootUpdate(Some(root_node)))
@@ -100,7 +104,7 @@ async fn process_command(address: &Url, client: &Client, command: Command) -> an
                 Ok(GroveGdbUpdate::RootUpdate(None))
             }
         }
-        Command::FetchNode { path, key } => {
+        ProtocolCommand::FetchNode { path, key } => {
             log::info!("Fetching a node...");
             if let Some(node_update) = fetch_node(client, address, path, key).await? {
                 Ok(vec![node_update].into())
@@ -109,7 +113,7 @@ async fn process_command(address: &Url, client: &Client, command: Command) -> an
                 Ok(Vec::new().into())
             }
         }
-        Command::ProvePathQuery { path_query } => {
+        ProtocolCommand::ProvePathQuery { path_query } => {
             log::info!("Requesting a proof for a path query...");
             let proof = client
                 .post(format!("{address}prove_path_query"))
@@ -137,7 +141,7 @@ async fn process_command(address: &Url, client: &Client, command: Command) -> an
 
             Ok(GroveGdbUpdate::Proof(proof, updates, tree_proof_data))
         }
-        Command::FetchWithPathQuery { path_query } => {
+        ProtocolCommand::FetchWithPathQuery { path_query } => {
             log::info!(
                 "Fetching {} nodes of a subtree with a path query...",
                 path_query

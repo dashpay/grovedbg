@@ -5,11 +5,11 @@ use grovedbg_types::{Key, PathQuery, Query, QueryItem, SizedQuery, SubqueryBranc
 
 use super::{element_view::ElementView, SubtreeViewContext, NODE_WIDTH};
 use crate::{
+    bus::{CommandBus, UserAction},
     path_ctx::{path_label, Path},
-    protocol::Command,
+    protocol::ProtocolCommand,
     theme::subtree_line_color,
     tree_data::{SubtreeData, TreeData},
-    CommandsSender,
 };
 
 const KV_PER_PAGE: usize = 10;
@@ -45,44 +45,40 @@ impl<'pa> SubtreeView<'pa> {
         self.page_index = index / KV_PER_PAGE;
     }
 
-    fn fetch(&self, commands_sender: &CommandsSender, limit: Option<u16>) {
-        let _ = commands_sender
-            .blocking_send(Command::FetchWithPathQuery {
-                path_query: PathQuery {
-                    path: self.path.to_vec(),
-                    query: SizedQuery {
-                        query: Query {
-                            items: vec![QueryItem::RangeFull],
-                            default_subquery_branch: SubqueryBranch {
-                                subquery_path: None,
-                                subquery: None,
-                            },
-                            conditional_subquery_branches: Vec::new(),
-                            left_to_right: true,
-                        },
-                        limit,
-                        offset: None,
-                    },
-                },
-            })
-            .inspect_err(|_| log::error!("Unable to reach GroveDBG protocol thread"));
-    }
-
-    fn fetch_n(&self, commands_sender: &CommandsSender, n: u16) {
-        self.fetch(commands_sender, Some(n))
-    }
-
-    fn fetch_all(&self, commands_sender: &CommandsSender) {
-        self.fetch(commands_sender, None)
-    }
-
-    fn fetch_key(&self, commands_sender: &CommandsSender, key: Vec<u8>) {
-        let _ = commands_sender
-            .blocking_send(Command::FetchNode {
+    fn fetch(&self, bus: &CommandBus, limit: Option<u16>) {
+        bus.protocol_command(ProtocolCommand::FetchWithPathQuery {
+            path_query: PathQuery {
                 path: self.path.to_vec(),
-                key,
-            })
-            .inspect_err(|_| log::error!("Unable to reach GroveDBG protocol thread"));
+                query: SizedQuery {
+                    query: Query {
+                        items: vec![QueryItem::RangeFull],
+                        default_subquery_branch: SubqueryBranch {
+                            subquery_path: None,
+                            subquery: None,
+                        },
+                        conditional_subquery_branches: Vec::new(),
+                        left_to_right: true,
+                    },
+                    limit,
+                    offset: None,
+                },
+            },
+        });
+    }
+
+    fn fetch_n(&self, bus: &CommandBus, n: u16) {
+        self.fetch(bus, Some(n))
+    }
+
+    fn fetch_all(&self, bus: &CommandBus) {
+        self.fetch(bus, None)
+    }
+
+    fn fetch_key(&self, bus: &CommandBus, key: Vec<u8>) {
+        bus.protocol_command(ProtocolCommand::FetchNode {
+            path: self.path.to_vec(),
+            key,
+        });
     }
 
     fn next_page(&mut self, ctx: &mut SubtreeViewContext) {
@@ -96,18 +92,13 @@ impl<'pa> SubtreeView<'pa> {
     }
 
     /// Draw subtree control buttons
-    fn draw_controls(
-        &mut self,
-        ui: &mut egui::Ui,
-        commands_sender: &CommandsSender,
-        tree_data: &mut TreeData<'pa>,
-    ) {
+    fn draw_controls(&mut self, ui: &mut egui::Ui, bus: &CommandBus<'pa>, tree_data: &mut TreeData<'pa>) {
         ui.horizontal(|controls_ui| {
             let subtree_data = tree_data.get(self.path);
             let root_key = subtree_data.root_key.clone();
 
             if controls_ui.button("10").on_hover_text("Fetch 10 items").clicked() {
-                self.fetch_n(commands_sender, 10);
+                self.fetch_n(bus, 10);
             }
 
             if controls_ui
@@ -115,7 +106,7 @@ impl<'pa> SubtreeView<'pa> {
                 .on_hover_text("Fetch 100 items")
                 .clicked()
             {
-                self.fetch_n(commands_sender, 100);
+                self.fetch_n(bus, 100);
             }
 
             if controls_ui
@@ -123,7 +114,7 @@ impl<'pa> SubtreeView<'pa> {
                 .on_hover_text("Fetch whole subtree")
                 .clicked()
             {
-                self.fetch_all(commands_sender);
+                self.fetch_all(bus);
             }
 
             if let Some(key) = subtree_data.root_key.as_ref() {
@@ -132,7 +123,7 @@ impl<'pa> SubtreeView<'pa> {
                     .on_hover_text("Fetch root node data")
                     .clicked()
                 {
-                    self.fetch_key(commands_sender, key.clone());
+                    self.fetch_key(bus, key.clone());
                 }
             }
 
@@ -154,19 +145,13 @@ impl<'pa> SubtreeView<'pa> {
                 self.path.select_for_query();
             }
 
-            if let Some(key) = root_key {
+            if root_key.is_some() {
                 if controls_ui
                     .button(egui_phosphor::regular::TREE_STRUCTURE)
                     .on_hover_text("Select subtree for Merk view")
                     .clicked()
                 {
-                    tree_data.select_for_merk(self.path);
-                    let _ = commands_sender
-                        .blocking_send(Command::FetchNode {
-                            path: self.path.to_vec(),
-                            key: key.clone(),
-                        })
-                        .inspect_err(|_| log::error!("Unable to reach GroveDBG protocol thread"));
+                    bus.user_action(UserAction::SelectMerkView(self.path));
                 }
             }
         });
@@ -270,7 +255,7 @@ impl<'pa> SubtreeView<'pa> {
                     })
                     .show(area, |subtree_ui| {
                         subtree_ui.set_max_width(NODE_WIDTH);
-                        self.draw_controls(subtree_ui, &subtree_view_ctx.commands_sender, tree_data);
+                        self.draw_controls(subtree_ui, subtree_view_ctx.bus, tree_data);
                         subtree_ui.separator();
 
                         path_label(subtree_ui, self.path, &subtree_view_ctx.profile_ctx);

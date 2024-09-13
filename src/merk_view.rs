@@ -6,13 +6,14 @@ use grovedbg_types::Key;
 use reingold_tilford::{Coordinate, NodeInfo};
 
 use crate::{
+    bus::CommandBus,
     path_ctx::Path,
     profiles::ActiveProfileSubtreeContext,
-    protocol::Command,
+    protocol::ProtocolCommand,
     theme::proof_node_color,
     tree_data::{SubtreeData, SubtreeProofData},
     tree_view::{ElementView, ElementViewContext, SubtreeElements, NODE_WIDTH},
-    CommandsSender, FocusedSubree,
+    FocusedSubree,
 };
 
 const INNER_MARGIN: f32 = 8.;
@@ -49,16 +50,14 @@ pub(crate) struct MerkView {
     initial_focus: bool,
     transform: TSTransform,
     node_focus: Option<Key>,
-    commands_sender: CommandsSender,
 }
 
 impl MerkView {
-    pub(crate) fn new(commands_sender: CommandsSender) -> Self {
+    pub(crate) fn new() -> Self {
         MerkView {
             transform: TSTransform::default(),
             initial_focus: false,
             node_focus: None,
-            commands_sender,
         }
     }
 
@@ -66,8 +65,9 @@ impl MerkView {
         &mut self,
         ctx: &Context,
         rect: Rect,
+        bus: &CommandBus,
         subtree_data: &mut SubtreeData,
-        mut subtree_proof_data: &mut Option<&mut SubtreeProofData>,
+        subtree_proof_data: &mut Option<&mut SubtreeProofData>,
         path: Path,
         element_view_context: &mut ElementViewContext,
         key: Key,
@@ -129,15 +129,10 @@ impl MerkView {
                                         .or_insert_with(|| ElementView::new_placeholder(left.clone()))
                                         .merk_visible = true;
 
-                                    let _ = self
-                                        .commands_sender
-                                        .blocking_send(Command::FetchNode {
-                                            path: path.to_vec(),
-                                            key: left.clone(),
-                                        })
-                                        .inspect_err(|_| {
-                                            log::error!("Unable to reach GroveDBG protocol thread")
-                                        });
+                                    bus.protocol_command(ProtocolCommand::FetchNode {
+                                        path: path.to_vec(),
+                                        key: left.clone(),
+                                    });
                                 }
                             } else {
                                 line.add_enabled(false, left_button);
@@ -168,15 +163,10 @@ impl MerkView {
                                         .or_insert_with(|| ElementView::new_placeholder(right.clone()))
                                         .merk_visible = true;
 
-                                    let _ = self
-                                        .commands_sender
-                                        .blocking_send(Command::FetchNode {
-                                            path: path.to_vec(),
-                                            key: right.clone(),
-                                        })
-                                        .inspect_err(|_| {
-                                            log::error!("Unable to reach GroveDBG protocol thread")
-                                        });
+                                    bus.protocol_command(ProtocolCommand::FetchNode {
+                                        path: path.to_vec(),
+                                        key: right.clone(),
+                                    });
                                 }
                             } else {
                                 line.add_enabled(false, right_button);
@@ -264,6 +254,7 @@ impl MerkView {
     pub(crate) fn draw<'pa>(
         &mut self,
         ui: &mut egui::Ui,
+        bus: &CommandBus<'pa>,
         path: Path<'pa>,
         subtree_data: &mut SubtreeData,
         mut subtree_proof_data: Option<&mut SubtreeProofData>,
@@ -336,12 +327,11 @@ impl MerkView {
             .map(|(k, v)| (k.to_owned(), v))
             .collect();
 
-        let commands_sender = self.commands_sender.clone();
         let mut element_view_context = ElementViewContext {
             path,
             focus_subtree,
             profile_ctx: &mut profile_ctx,
-            commands_sender: &commands_sender,
+            bus,
         };
 
         for (key, Coordinate { x, y }) in layout {
@@ -350,6 +340,7 @@ impl MerkView {
             self.draw_node(
                 ui.ctx(),
                 rect,
+                bus,
                 subtree_data,
                 &mut subtree_proof_data,
                 path,
