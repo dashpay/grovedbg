@@ -1,5 +1,12 @@
-use futures::TryFutureExt;
-use grovedbg_types::{Key, NodeFetchRequest, NodeUpdate, Path, PathQuery, Proof, RootFetchRequest};
+mod proof_tree;
+
+use std::collections::BTreeMap;
+
+use futures::{Future, TryFutureExt};
+use grovedbg_types::{
+    Key, MerkProofNode, NodeFetchRequest, NodeUpdate, Path, PathQuery, Proof, RootFetchRequest,
+};
+use proof_tree::ProofTree;
 use reqwest::{Client, Url};
 use tokio::sync::mpsc::{Receiver, Sender};
 
@@ -7,7 +14,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 /// debugger endpoint.
 pub async fn start_grovedbg_protocol(
     address: Url,
-    mut commands_receiver: Receiver<Command>,
+    mut commands_receiver: Receiver<ProtocolCommand>,
     updates_sender: Sender<GroveGdbUpdate>,
 ) {
     let client = Client::new();
@@ -34,7 +41,7 @@ pub async fn start_grovedbg_protocol(
 }
 
 /// Background tasks of GroveDBG application
-pub enum Command {
+pub enum ProtocolCommand {
     FetchRoot,
     FetchNode { path: Path, key: Key },
     ProvePathQuery { path_query: PathQuery },
@@ -45,7 +52,11 @@ pub enum Command {
 pub enum GroveGdbUpdate {
     RootUpdate(Option<NodeUpdate>),
     Node(Vec<NodeUpdate>),
-    Proof(Proof),
+    Proof(
+        Proof,
+        Vec<NodeUpdate>,
+        BTreeMap<Vec<Vec<u8>>, BTreeMap<Key, MerkProofNode>>,
+    ),
 }
 
 impl From<Vec<NodeUpdate>> for GroveGdbUpdate {
@@ -54,62 +65,83 @@ impl From<Vec<NodeUpdate>> for GroveGdbUpdate {
     }
 }
 
-impl From<Proof> for GroveGdbUpdate {
-    fn from(value: Proof) -> Self {
-        GroveGdbUpdate::Proof(value)
-    }
+fn fetch_node(
+    client: &Client,
+    address: &Url,
+    path: Vec<Vec<u8>>,
+    key: Vec<u8>,
+) -> impl Future<Output = Result<Option<NodeUpdate>, reqwest::Error>> {
+    client
+        .post(format!("{address}fetch_node"))
+        .json(&NodeFetchRequest { path, key })
+        .send()
+        .and_then(|response| response.json::<Option<NodeUpdate>>())
+}
+
+fn fetch_root_node(
+    client: &Client,
+    address: &Url,
+) -> impl Future<Output = Result<Option<NodeUpdate>, reqwest::Error>> {
+    client
+        .post(format!("{address}fetch_root_node"))
+        .json(&RootFetchRequest)
+        .send()
+        .and_then(|response| response.json::<Option<NodeUpdate>>())
 }
 
 async fn process_command(
     address: &Url,
     client: &Client,
-    command: Command,
-) -> Result<GroveGdbUpdate, reqwest::Error> {
+    command: ProtocolCommand,
+) -> anyhow::Result<GroveGdbUpdate> {
     match command {
-        Command::FetchRoot => {
+        ProtocolCommand::FetchRoot => {
             log::info!("Fetch GroveDB root node");
-            if let Some(root_node) = client
-                .post(format!("{address}fetch_root_node"))
-                .json(&RootFetchRequest)
-                .send()
-                .and_then(|response| response.json::<Option<NodeUpdate>>())
-                .await?
-            {
+            if let Some(root_node) = fetch_root_node(client, address).await? {
                 Ok(GroveGdbUpdate::RootUpdate(Some(root_node)))
             } else {
                 log::warn!("No root node returned, GroveDB is empty");
                 Ok(GroveGdbUpdate::RootUpdate(None))
             }
         }
-        Command::FetchNode { path, key } => {
+        ProtocolCommand::FetchNode { path, key } => {
             log::info!("Fetching a node...");
-            if let Some(node_update) = client
-                .post(format!("{address}fetch_node"))
-                .json(&NodeFetchRequest {
-                    path: path.clone(),
-                    key: key.clone(),
-                })
-                .send()
-                .and_then(|response| response.json::<Option<NodeUpdate>>())
-                .await?
-            {
+            if let Some(node_update) = fetch_node(client, address, path, key).await? {
                 Ok(vec![node_update].into())
             } else {
                 log::warn!("No node returned");
                 Ok(Vec::new().into())
             }
         }
-        Command::ProvePathQuery { path_query } => {
+        ProtocolCommand::ProvePathQuery { path_query } => {
             log::info!("Requesting a proof for a path query...");
-            Ok(client
+            let proof = client
                 .post(format!("{address}prove_path_query"))
                 .json(&path_query)
                 .send()
                 .and_then(|response| response.json::<grovedbg_types::Proof>())
-                .await?
-                .into())
+                .await?;
+
+            let mut proof_tree = ProofTree::new(client, address, proof.clone()).await?;
+            proof_tree.fetch_additional_data().await?;
+
+            let updates = proof_tree
+                .tree
+                .clone()
+                .into_values()
+                .flat_map(|vals| vals.tree.into_iter())
+                .flat_map(|node| node.node_update)
+                .collect();
+
+            let tree_proof_data: BTreeMap<_, _> = proof_tree
+                .tree
+                .into_iter()
+                .map(|(k, v)| (k, v.to_proof_tree_data()))
+                .collect();
+
+            Ok(GroveGdbUpdate::Proof(proof, updates, tree_proof_data))
         }
-        Command::FetchWithPathQuery { path_query } => {
+        ProtocolCommand::FetchWithPathQuery { path_query } => {
             log::info!(
                 "Fetching {} nodes of a subtree with a path query...",
                 path_query

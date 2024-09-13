@@ -4,12 +4,17 @@ use grovedbg_types::{Key, NodeUpdate};
 
 use crate::{
     path_ctx::{Path, PathCtx},
+    proof_viewer::MerkProofNodeViewer,
     tree_view::{ElementOrPlaceholder, ElementView, SubtreeElements},
 };
+
+pub(crate) type SubtreeProofData = BTreeMap<Key, MerkProofNodeViewer>;
+pub(crate) type ProofData<'pa> = BTreeMap<Path<'pa>, SubtreeProofData>;
 
 pub(crate) struct TreeData<'pa> {
     path_ctx: &'pa PathCtx,
     data: BTreeMap<Path<'pa>, SubtreeData>,
+    proof_data: ProofData<'pa>,
     merk_selected: Path<'pa>,
 }
 
@@ -32,11 +37,22 @@ impl<'pa> TreeData<'pa> {
             path_ctx,
             data: Default::default(),
             merk_selected: path_ctx.get_root(),
+            proof_data: Default::default(),
         }
     }
 
-    pub(crate) fn get_merk_selected(&mut self) -> (Path<'pa>, &mut SubtreeData) {
-        (self.merk_selected, self.get(self.merk_selected))
+    pub(crate) fn get_merk_selected(
+        &mut self,
+    ) -> (Path<'pa>, &mut SubtreeData, Option<&mut SubtreeProofData>) {
+        if !self.data.contains_key(&self.merk_selected) {
+            self.get_create_missing_parents(self.merk_selected);
+        }
+
+        (
+            self.merk_selected,
+            self.data.get_mut(&self.merk_selected).unwrap(),
+            self.proof_data.get_mut(&self.merk_selected),
+        )
     }
 
     pub(crate) fn select_for_merk(&mut self, path: Path<'pa>) {
@@ -82,9 +98,9 @@ impl<'pa> TreeData<'pa> {
             path,
             key,
             element,
-            feature_type,
             value_hash,
             kv_digest_hash,
+            ..
         }: NodeUpdate,
     ) {
         let subtree_path = self.path_ctx.add_path(path);
@@ -104,8 +120,8 @@ impl<'pa> TreeData<'pa> {
                 e.insert(ElementView::new(
                     key,
                     ElementOrPlaceholder::Element(element),
-                    left_child,
-                    right_child,
+                    left_child.clone(),
+                    right_child.clone(),
                     Some(kv_digest_hash),
                     Some(value_hash),
                 ));
@@ -114,11 +130,55 @@ impl<'pa> TreeData<'pa> {
                 let e = o.get_mut();
 
                 e.value = ElementOrPlaceholder::Element(element);
-                e.left_child = left_child;
-                e.right_child = right_child;
+                e.left_child = left_child.clone();
+                e.right_child = right_child.clone();
                 e.kv_digest_hash = Some(kv_digest_hash);
                 e.value_hash = Some(value_hash);
             }
         };
+
+        if let (Some(left_hash), Some(left_key)) = (left_merk_hash, left_child) {
+            match subtree.elements.entry(left_key.clone()) {
+                Entry::Vacant(e) => {
+                    let element = e.insert(ElementView::new_placeholder(left_key));
+                    element.node_hash = Some(left_hash);
+                }
+                Entry::Occupied(mut o) => {
+                    let e = o.get_mut();
+                    e.node_hash = Some(left_hash);
+                }
+            };
+        }
+
+        if let (Some(right_hash), Some(right_key)) = (right_merk_hash, right_child) {
+            match subtree.elements.entry(right_key.clone()) {
+                Entry::Vacant(e) => {
+                    let element = e.insert(ElementView::new_placeholder(right_key));
+                    element.node_hash = Some(right_hash);
+                }
+                Entry::Occupied(mut o) => {
+                    let e = o.get_mut();
+                    e.node_hash = Some(right_hash);
+                }
+            };
+        }
+    }
+
+    pub(crate) fn set_proof_tree(
+        &mut self,
+        proof_tree: BTreeMap<Vec<Vec<u8>>, BTreeMap<Vec<u8>, grovedbg_types::MerkProofNode>>,
+    ) {
+        self.proof_data = proof_tree
+            .into_iter()
+            .map(|(path_vec, proof_subtree)| {
+                (
+                    self.path_ctx.add_path(path_vec),
+                    proof_subtree
+                        .into_iter()
+                        .map(|(key, proof_node)| (key, proof_node.into()))
+                        .collect(),
+                )
+            })
+            .collect();
     }
 }

@@ -4,11 +4,11 @@ use integer_encoding::VarInt;
 use strum::IntoEnumIterator;
 
 use crate::{
+    bus::CommandBus,
     bytes_utils::BytesInputVariant,
     path_ctx::{path_label, Path, PathCtx},
     profiles::RootActiveProfileContext,
-    protocol::Command,
-    CommandsSender,
+    protocol::ProtocolCommand,
 };
 
 const MARGIN: f32 = 20.;
@@ -33,7 +33,7 @@ impl QueryBuilder {
         ui: &mut egui::Ui,
         path_ctx: &PathCtx,
         profile_ctx: RootActiveProfileContext<'pf>,
-        sender: &CommandsSender,
+        bus: &CommandBus,
     ) {
         if let Some(path) = path_ctx.get_selected_for_query() {
             let profile_ctx = profile_ctx.fast_forward(path);
@@ -44,10 +44,10 @@ impl QueryBuilder {
 
             ui.horizontal(|line| {
                 if line.button("Prove").clicked() {
-                    self.prove_query(&path, sender);
+                    self.prove_query(&path, bus);
                 }
                 if line.button("Fetch").clicked() {
-                    self.fetch_query(&path, sender);
+                    self.fetch_query(&path, bus);
                 }
             });
         } else {
@@ -55,7 +55,7 @@ impl QueryBuilder {
         }
     }
 
-    fn prove_query(&self, path: &Path, sender: &CommandsSender) {
+    fn prove_query(&self, path: &Path, bus: &CommandBus) {
         let path_query = PathQuery {
             path: path.to_vec(),
             query: grovedbg_types::SizedQuery {
@@ -65,13 +65,10 @@ impl QueryBuilder {
             },
         };
 
-        sender
-            .blocking_send(Command::ProvePathQuery { path_query })
-            .inspect_err(|_| log::error!("Can't reach data fetching thread"))
-            .ok();
+        bus.protocol_command(ProtocolCommand::ProvePathQuery { path_query });
     }
 
-    fn fetch_query(&self, path: &Path, sender: &CommandsSender) {
+    fn fetch_query(&self, path: &Path, bus: &CommandBus) {
         let path_query = PathQuery {
             path: path.to_vec(),
             query: grovedbg_types::SizedQuery {
@@ -81,10 +78,7 @@ impl QueryBuilder {
             },
         };
 
-        sender
-            .blocking_send(Command::FetchWithPathQuery { path_query })
-            .inspect_err(|_| log::error!("Can't reach data fetching thread"))
-            .ok();
+        bus.protocol_command(ProtocolCommand::FetchWithPathQuery { path_query });
     }
 }
 

@@ -7,9 +7,10 @@ use eframe::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    bus::{CommandBus, UserAction},
     bytes_utils::{bytes_by_display_variant, BytesDisplayVariant, BytesInput},
     path_ctx::{Path, PathCtx},
-    FocusedSubree, PROFILES_KEY,
+    PROFILES_KEY,
 };
 
 /// I drive
@@ -72,9 +73,9 @@ impl ProfileEntry {
     fn draw<'pa>(
         &mut self,
         ui: &mut egui::Ui,
+        bus: &CommandBus<'pa>,
         read_only: bool,
         parent_path: Option<Path<'pa>>,
-        auto_focus: &mut Option<FocusedSubree<'pa>>,
     ) -> ToDelete {
         let mut to_delete = false;
         let self_path = parent_path.and_then(|p| key_as_alias(&self.key).map(|k| p.child(k)));
@@ -96,7 +97,7 @@ impl ProfileEntry {
                         .on_hover_text("Jump to subtree")
                         .clicked()
                     {
-                        *auto_focus = Some(FocusedSubree { path, key: None });
+                        bus.user_action(UserAction::FocusSubtree(path));
                     }
                 }
 
@@ -122,7 +123,7 @@ impl ProfileEntry {
                             .on_hover_text("Jump to subtree")
                             .clicked()
                         {
-                            *auto_focus = Some(FocusedSubree { path, key: None });
+                            bus.user_action(UserAction::FocusSubtree(path));
                         }
                     }
 
@@ -173,7 +174,7 @@ impl ProfileEntry {
                         }
                     }
 
-                    draw_entries(frame, &mut self.sub_items, read_only, self_path, auto_focus);
+                    draw_entries(frame, bus, &mut self.sub_items, read_only, self_path);
                 });
         }
 
@@ -299,15 +300,15 @@ fn default_profiles() -> Vec<Profile> {
 
 fn draw_entries<'pa>(
     ui: &mut egui::Ui,
+    bus: &CommandBus<'pa>,
     entries: &mut Vec<ProfileEntry>,
     read_only: bool,
     parent_path: Option<Path<'pa>>,
-    auto_focus: &mut Option<FocusedSubree<'pa>>,
 ) {
     let mut delete_idxs = Vec::new();
 
     for (idx, entry) in entries.iter_mut().enumerate() {
-        let to_delete = entry.draw(ui, read_only, parent_path, auto_focus);
+        let to_delete = entry.draw(ui, bus, read_only, parent_path);
         if to_delete {
             delete_idxs.push(idx);
         }
@@ -355,12 +356,7 @@ impl ProfilesView {
             })
     }
 
-    pub(crate) fn draw<'pa>(
-        &mut self,
-        ui: &mut egui::Ui,
-        path_ctx: &'pa PathCtx,
-        auto_focus: &mut Option<FocusedSubree<'pa>>,
-    ) {
+    pub(crate) fn draw<'pa>(&mut self, ui: &mut egui::Ui, bus: &CommandBus<'pa>, path_ctx: &'pa PathCtx) {
         let mut selected_profile = None;
         let mut copied_profiles = Vec::new();
         let mut deleted_profiles = Vec::new();
@@ -406,10 +402,10 @@ impl ProfilesView {
         if let Some(profile) = selected_profile {
             draw_entries(
                 ui,
+                bus,
                 &mut profile.entries,
                 profile.read_only,
                 Some(path_ctx.get_root()),
-                auto_focus,
             );
 
             if !profile.read_only && ui.button(egui_phosphor::regular::PLUS_SQUARE).clicked() {

@@ -8,6 +8,7 @@ use super::{ElementViewContext, NODE_WIDTH};
 use crate::{
     bytes_utils::{binary_label, binary_label_colored, bytes_by_display_variant, BytesDisplayVariant},
     path_ctx::{full_path_display, full_path_display_iter},
+    protocol::ProtocolCommand,
     theme::element_to_color,
 };
 
@@ -31,6 +32,8 @@ pub(crate) struct ElementView {
     pub(crate) flags_display: BytesDisplayVariant,
     pub(crate) kv_digest_hash_display: BytesDisplayVariant,
     pub(crate) value_hash_display: BytesDisplayVariant,
+    pub(crate) node_hash: Option<CryptoHash>,
+    pub(crate) node_hash_display: BytesDisplayVariant,
     pub(crate) show_hashes: bool,
     pub(crate) show_reference_details: bool,
     pub(crate) merk_visible: bool,
@@ -47,8 +50,10 @@ impl ElementView {
             value_hash: None,
             value_display: Default::default(),
             flags_display: Default::default(),
-            kv_digest_hash_display: Default::default(),
-            value_hash_display: Default::default(),
+            kv_digest_hash_display: BytesDisplayVariant::Hex,
+            value_hash_display: BytesDisplayVariant::Hex,
+            node_hash: None,
+            node_hash_display: BytesDisplayVariant::Hex,
             show_hashes: Default::default(),
             show_reference_details: Default::default(),
             merk_visible: false,
@@ -79,6 +84,8 @@ impl ElementView {
             flags_display: BytesDisplayVariant::U8,
             kv_digest_hash_display: BytesDisplayVariant::Hex,
             value_hash_display: BytesDisplayVariant::Hex,
+            node_hash: None,
+            node_hash_display: BytesDisplayVariant::Hex,
             show_hashes: false,
             show_reference_details: false,
             merk_visible: false,
@@ -92,8 +99,20 @@ impl ElementView {
         // Draw key
         ui.horizontal(|key_line| {
             if key_line
+                .button(egui_phosphor::regular::ARROW_CLOCKWISE)
+                .on_hover_text("Refetch the node")
+                .clicked()
+            {
+                element_view_context
+                    .bus
+                    .protocol_command(ProtocolCommand::FetchNode {
+                        path: element_view_context.path().to_vec(),
+                        key: self.key.clone(),
+                    });
+            }
+            if key_line
                 .button(egui_phosphor::regular::HASH)
-                .on_hover_text("Show item hashes received from GroveDB (unvalidated)")
+                .on_hover_text("Show item hashes received from GroveDB")
                 .clicked()
             {
                 self.show_hashes = !self.show_hashes;
@@ -229,6 +248,12 @@ impl ElementView {
                     }
                 };
                 if self.show_hashes {
+                    value_ui.horizontal(|line| {
+                        if let Some(hash) = &self.node_hash {
+                            line.label("Node hash:");
+                            binary_label(line, hash, &mut self.node_hash_display);
+                        }
+                    });
                     value_ui.horizontal(|line| {
                         if let Some(hash) = &self.kv_digest_hash {
                             line.label("KV digest hash:");

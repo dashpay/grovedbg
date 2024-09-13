@@ -1,6 +1,10 @@
 use eframe::egui::{self, CollapsingHeader, ScrollArea};
 
-use crate::bytes_utils::BytesView;
+use crate::{
+    bus::{CommandBus, UserAction},
+    bytes_utils::BytesView,
+    path_ctx::{Path, PathCtx},
+};
 
 pub(crate) struct ProofViewer {
     prove_options: ProveOptionsView,
@@ -15,11 +19,11 @@ impl ProofViewer {
         }
     }
 
-    pub(crate) fn draw(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn draw<'pa>(&mut self, ui: &mut egui::Ui, bus: &CommandBus<'pa>, path_ctx: &'pa PathCtx) {
         ScrollArea::vertical().show(ui, |scroll| {
             self.prove_options.draw(scroll);
             scroll.separator();
-            self.root_layer.draw(scroll);
+            self.root_layer.draw(scroll, bus, path_ctx.get_root());
         });
     }
 }
@@ -41,18 +45,27 @@ impl ProofLayerView {
         }
     }
 
-    fn draw(&mut self, ui: &mut egui::Ui) {
+    fn draw<'pa>(&mut self, ui: &mut egui::Ui, bus: &CommandBus<'pa>, path: Path<'pa>) {
         ui.label("Merk proof:");
         self.merk_proof.draw(ui);
 
         ui.separator();
 
         for (key, layer) in self.lower_layers.iter_mut() {
-            key.draw(ui);
+            ui.horizontal(|line| {
+                key.draw(line);
+                if line
+                    .button(egui_phosphor::regular::TREE_STRUCTURE)
+                    .on_hover_text("Select subtree for Merk view")
+                    .clicked()
+                {
+                    bus.user_action(UserAction::SelectMerkView(path.child(key.bytes.to_vec())));
+                }
+            });
             CollapsingHeader::new("Layer proof")
                 .id_source(&key.bytes)
                 .show(ui, |collapsing| {
-                    layer.draw(collapsing);
+                    layer.draw(collapsing, bus, path.child(key.bytes.clone()));
                 });
         }
     }
@@ -79,7 +92,7 @@ impl MerkProofViewer {
     }
 }
 
-enum MerkProofOpViewer {
+pub(crate) enum MerkProofOpViewer {
     Push(MerkProofNodeViewer),
     PushInverted(MerkProofNodeViewer),
     Parent,
@@ -134,7 +147,7 @@ impl MerkProofOpViewer {
     }
 }
 
-enum MerkProofNodeViewer {
+pub(crate) enum MerkProofNodeViewer {
     Hash(BytesView),
     KVHash(BytesView),
     KVDigest(BytesView, BytesView),
@@ -149,9 +162,9 @@ enum MerkProofNodeViewer {
     KVRefValueHash(BytesView, ElementViewer, BytesView),
 }
 
-impl MerkProofNodeViewer {
-    fn new(node: grovedbg_types::MerkProofNode) -> Self {
-        match node {
+impl From<grovedbg_types::MerkProofNode> for MerkProofNodeViewer {
+    fn from(value: grovedbg_types::MerkProofNode) -> Self {
+        match value {
             grovedbg_types::MerkProofNode::Hash(hash) => {
                 MerkProofNodeViewer::Hash(BytesView::new(hash.to_vec()))
             }
@@ -188,8 +201,14 @@ impl MerkProofNodeViewer {
             }
         }
     }
+}
 
-    fn draw(&mut self, ui: &mut egui::Ui) {
+impl MerkProofNodeViewer {
+    fn new(node: grovedbg_types::MerkProofNode) -> Self {
+        node.into()
+    }
+
+    pub(crate) fn draw(&mut self, ui: &mut egui::Ui) {
         ui.vertical(|ui| {
             match self {
                 MerkProofNodeViewer::Hash(hash) => {
@@ -297,7 +316,7 @@ impl ProveOptionsView {
     }
 }
 
-enum ElementViewer {
+pub(crate) enum ElementViewer {
     Subtree {
         root_key: Option<BytesView>,
         element_flags: Option<BytesView>,
