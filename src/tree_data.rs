@@ -98,9 +98,9 @@ impl<'pa> TreeData<'pa> {
             path,
             key,
             element,
-            feature_type,
             value_hash,
             kv_digest_hash,
+            ..
         }: NodeUpdate,
     ) {
         let subtree_path = self.path_ctx.add_path(path);

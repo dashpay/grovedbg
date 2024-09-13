@@ -249,7 +249,7 @@ impl GroveDbgApp {
                         .outer_margin(PANEL_MARGIN)
                         .show(ui, |frame| {
                             if let Some(proof_viewer) = &mut self.proof_viewer {
-                                proof_viewer.draw(frame);
+                                proof_viewer.draw(frame, &self.bus, &self.path_ctx);
                             } else {
                                 frame.label("No proof to show yet");
                             }
