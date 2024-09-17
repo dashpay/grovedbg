@@ -2,14 +2,13 @@ mod proof_tree;
 
 use std::collections::BTreeMap;
 
-use futures::{Future, TryFutureExt};
 use grovedbg_types::{
     DropSessionRequest, Key, MerkProofNode, NewSessionResponse, NodeFetchRequest, NodeUpdate, Path,
     PathQuery, Proof, RootFetchRequest, SessionId, WithSession,
 };
 use proof_tree::ProofTree;
-use reqwest::{Client, Url};
-use tokio::sync::mpsc::{Receiver, Sender};
+use reqwest::{Client, StatusCode, Url};
+use tokio::sync::mpsc::{self, Receiver, Sender};
 
 /// Starts the data exchange process between GroveDBG application and GroveDB's
 /// debugger endpoint.
@@ -25,11 +24,25 @@ pub async fn start_grovedbg_protocol(
         address
     );
 
-    while let Some(cmd) = commands_receiver.recv().await {
+    let (feedback_send, mut feedback_recv) = mpsc::channel(10);
+
+    while let Some(cmd) = tokio::select! {
+        x = commands_receiver.recv() => x,
+        x = feedback_recv.recv() => x,
+    } {
         let updates = match process_command(&address, &client, cmd).await {
             Ok(x) => x,
             Err(e) => {
-                log::error!("Error processing command: {e}");
+                match e.downcast_ref::<reqwest::Error>() {
+                    Some(req_error) if req_error.status() == Some(StatusCode::UNAUTHORIZED) => {
+                        log::warn!("Session expired");
+                        feedback_send
+                            .send(ProtocolCommand::NewSession { old_session: None })
+                            .await
+                            .ok();
+                    }
+                    _ => log::error!("Error processing command: {e}"),
+                }
                 continue;
             }
         };
@@ -60,6 +73,7 @@ pub enum ProtocolCommand {
 }
 
 /// Updates and commands' results pushed to GroveDBG application
+#[derive(Debug)]
 pub enum GroveGdbUpdate {
     RootUpdate(Option<NodeUpdate>),
     Node(Vec<NodeUpdate>),
@@ -77,13 +91,13 @@ impl From<Vec<NodeUpdate>> for GroveGdbUpdate {
     }
 }
 
-fn fetch_node(
+async fn fetch_node(
     client: &Client,
     address: &Url,
     session_id: SessionId,
     path: Vec<Vec<u8>>,
     key: Vec<u8>,
-) -> impl Future<Output = Result<Option<NodeUpdate>, reqwest::Error>> {
+) -> Result<Option<NodeUpdate>, reqwest::Error> {
     client
         .post(format!("{address}fetch_node"))
         .json(&WithSession {
@@ -91,14 +105,17 @@ fn fetch_node(
             request: NodeFetchRequest { path, key },
         })
         .send()
-        .and_then(|response| response.json::<Option<NodeUpdate>>())
+        .await?
+        .error_for_status()?
+        .json::<Option<NodeUpdate>>()
+        .await
 }
 
-fn fetch_root_node(
+async fn fetch_root_node(
     client: &Client,
     address: &Url,
     session_id: SessionId,
-) -> impl Future<Output = Result<Option<NodeUpdate>, reqwest::Error>> {
+) -> Result<Option<NodeUpdate>, reqwest::Error> {
     client
         .post(format!("{address}fetch_root_node"))
         .json(&WithSession {
@@ -106,7 +123,10 @@ fn fetch_root_node(
             request: RootFetchRequest,
         })
         .send()
-        .and_then(|response| response.json::<Option<NodeUpdate>>())
+        .await?
+        .error_for_status()?
+        .json::<Option<NodeUpdate>>()
+        .await
 }
 
 async fn process_command(
@@ -151,7 +171,9 @@ async fn process_command(
                     request: path_query,
                 })
                 .send()
-                .and_then(|response| response.json::<grovedbg_types::Proof>())
+                .await?
+                .error_for_status()?
+                .json::<grovedbg_types::Proof>()
                 .await?;
 
             let mut proof_tree = ProofTree::new(client, address, proof.clone(), session_id).await?;
@@ -192,7 +214,9 @@ async fn process_command(
                     request: path_query,
                 })
                 .send()
-                .and_then(|response| response.json::<Vec<grovedbg_types::NodeUpdate>>())
+                .await?
+                .error_for_status()?
+                .json::<Vec<grovedbg_types::NodeUpdate>>()
                 .await?
                 .into())
         }
@@ -203,13 +227,16 @@ async fn process_command(
                     .post(format!("{address}drop_session"))
                     .json(&DropSessionRequest { session_id: old })
                     .send()
-                    .await?;
+                    .await?
+                    .error_for_status()?;
             }
             log::info!("Starting new session");
             let NewSessionResponse { session_id } = client
                 .post(format!("{address}new_session"))
                 .send()
-                .and_then(|response| response.json::<NewSessionResponse>())
+                .await?
+                .error_for_status()?
+                .json::<NewSessionResponse>()
                 .await?;
             Ok(GroveGdbUpdate::Session(session_id))
         }

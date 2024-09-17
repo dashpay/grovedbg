@@ -9,7 +9,7 @@ repository = "https://github.com/dashpay/grovedbg"
 
 [dependencies]
 eframe = { version = "0.28.1", features = ["persistence"] }
-egui_logger = { git = "https://github.com/fominok/egui_logger", branch = "light-theme-colors" }
+egui_logger = { git = "https://github.com/fominok/egui_logger", rev = "a8e958506d1aa11b0da1e3b100453837e341e1d7" }
 futures = "0.3.30"
 grovedbg-types = { path = "../grovedb/grovedbg-types", version = "2.0.3" }
 hex = "0.4.3"
@@ -26,9 +26,9 @@ reingold-tilford = "1.0.0"
 anyhow = "1.0.87"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { version = "1.39.3", default-features = false, features = ["sync", "rt-multi-thread"] }
+tokio = { version = "1.39.3", default-features = false, features = ["sync", "rt-multi-thread", "macros"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-tokio = { version = "1.39.3", default-features = false, features = ["sync"] }
+tokio = { version = "1.39.3", default-features = false, features = ["sync", "macros"] }
 wasm-bindgen-futures = "0.4.42"
 web-sys = "0.3.69"

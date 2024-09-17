@@ -75,7 +75,6 @@ pub fn start_grovedbg_app(
     let bus = CommandBus::new(protocol_sender);
 
     bus.new_session();
-    bus.fetch_command(FetchCommand::FetchRoot);
 
     Box::new(GroveDbgApp::new(
         cc.storage,
@@ -369,6 +368,17 @@ impl App for GroveDbgApp {
                 // if line.button("Help").clicked() {
                 //     self.show_help = !self.show_help;
                 // }
+
+                if line
+                    .button("New session")
+                    .on_hover_text(
+                        "Reset existing session and request a new one to access the latest GroveDB data",
+                    )
+                    .clicked()
+                {
+                    self.bus.new_session();
+                }
+
                 if !self.updates_receiver.is_empty() {
                     line.label("Processing updates...");
                     line.spinner();
@@ -399,7 +409,10 @@ impl App for GroveDbgApp {
                     GroveGdbUpdate::RootUpdate(None) => {
                         log::warn!("Received no root node: GroveDB is empty");
                     }
-                    GroveGdbUpdate::Session(session_id) => self.bus.set_session(session_id),
+                    GroveGdbUpdate::Session(session_id) => {
+                        self.bus.set_session(session_id);
+                        self.bus.fetch_command(FetchCommand::FetchRoot);
+                    }
                 }
             } else {
                 log::error!("Protocol thread was terminated, can't receive updates anymore");
