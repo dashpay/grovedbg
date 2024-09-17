@@ -3,11 +3,16 @@
 
 use std::{cell::RefCell, collections::VecDeque};
 
-use grovedbg_types::Key;
+use grovedbg_types::{Key, SessionId};
 
-use crate::{path_ctx::Path, protocol::ProtocolCommand, ProtocolSender};
+use crate::{
+    path_ctx::Path,
+    protocol::{FetchCommand, ProtocolCommand},
+    ProtocolSender,
+};
 
 pub(crate) struct CommandBus<'pa> {
+    session: RefCell<Option<SessionId>>,
     protocol_sender: ProtocolSender,
     actions_queue: RefCell<VecDeque<UserAction<'pa>>>,
 }
@@ -23,16 +28,37 @@ pub(crate) enum UserAction<'pa> {
 impl<'pa> CommandBus<'pa> {
     pub(crate) fn new(protocol_sender: ProtocolSender) -> Self {
         Self {
+            session: Default::default(),
             protocol_sender,
             actions_queue: Default::default(),
         }
     }
 
-    pub(crate) fn protocol_command(&self, command: ProtocolCommand) {
+    pub(crate) fn new_session(&self) {
         let _ = self
             .protocol_sender
-            .blocking_send(command)
+            .blocking_send(ProtocolCommand::NewSession {
+                old_session: self.session.take(),
+            })
             .inspect_err(|_| log::error!("Unable to reach GroveDBG protocol thread"));
+    }
+
+    pub(crate) fn set_session(&self, session_id: SessionId) {
+        *self.session.borrow_mut() = Some(session_id);
+    }
+
+    pub(crate) fn fetch_command(&self, command: FetchCommand) {
+        if let Some(session_id) = self.session.borrow().as_ref() {
+            let _ = self
+                .protocol_sender
+                .blocking_send(ProtocolCommand::Fetch {
+                    session_id: *session_id,
+                    command,
+                })
+                .inspect_err(|_| log::error!("Unable to reach GroveDBG protocol thread"));
+        } else {
+            log::warn!("Need to start a session first");
+        }
     }
 
     pub(crate) fn user_action(&self, action: UserAction<'pa>) {

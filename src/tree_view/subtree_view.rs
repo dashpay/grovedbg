@@ -7,7 +7,7 @@ use super::{element_view::ElementView, SubtreeViewContext, NODE_WIDTH};
 use crate::{
     bus::{CommandBus, UserAction},
     path_ctx::{path_label, Path},
-    protocol::ProtocolCommand,
+    protocol::FetchCommand,
     theme::subtree_line_color,
     tree_data::{SubtreeData, TreeData},
 };
@@ -46,7 +46,7 @@ impl<'pa> SubtreeView<'pa> {
     }
 
     fn fetch(&self, bus: &CommandBus, limit: Option<u16>) {
-        bus.protocol_command(ProtocolCommand::FetchWithPathQuery {
+        bus.fetch_command(FetchCommand::FetchWithPathQuery {
             path_query: PathQuery {
                 path: self.path.to_vec(),
                 query: SizedQuery {
@@ -75,7 +75,7 @@ impl<'pa> SubtreeView<'pa> {
     }
 
     fn fetch_key(&self, bus: &CommandBus, key: Vec<u8>) {
-        bus.protocol_command(ProtocolCommand::FetchNode {
+        bus.fetch_command(FetchCommand::FetchNode {
             path: self.path.to_vec(),
             key,
         });

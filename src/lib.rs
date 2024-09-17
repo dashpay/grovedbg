@@ -28,7 +28,7 @@ use path_ctx::{Path, PathCtx};
 use profiles::ProfilesView;
 use proof_viewer::ProofViewer;
 pub use protocol::start_grovedbg_protocol;
-use protocol::{GroveGdbUpdate, ProtocolCommand};
+use protocol::{FetchCommand, GroveGdbUpdate, ProtocolCommand};
 use query_builder::QueryBuilder;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tree_data::TreeData;
@@ -74,7 +74,8 @@ pub fn start_grovedbg_app(
 
     let bus = CommandBus::new(protocol_sender);
 
-    bus.protocol_command(ProtocolCommand::FetchRoot);
+    bus.new_session();
+    bus.fetch_command(FetchCommand::FetchRoot);
 
     Box::new(GroveDbgApp::new(
         cc.storage,
@@ -398,6 +399,7 @@ impl App for GroveDbgApp {
                     GroveGdbUpdate::RootUpdate(None) => {
                         log::warn!("Received no root node: GroveDB is empty");
                     }
+                    GroveGdbUpdate::Session(session_id) => self.bus.set_session(session_id),
                 }
             } else {
                 log::error!("Protocol thread was terminated, can't receive updates anymore");
@@ -434,7 +436,7 @@ impl App for GroveDbgApp {
         self.bus.process_actions(|action| match action {
             bus::UserAction::FocusSubtree(path) => {
                 if let Some((parent_path, parent_key)) = path.parent_with_key() {
-                    self.bus.protocol_command(ProtocolCommand::FetchNode {
+                    self.bus.fetch_command(FetchCommand::FetchNode {
                         path: parent_path.to_vec(),
                         key: parent_key,
                     })
@@ -443,7 +445,7 @@ impl App for GroveDbgApp {
             }
             bus::UserAction::FocusSubtreeKey(path, key) => {
                 if let Some((parent_path, parent_key)) = path.parent_with_key() {
-                    self.bus.protocol_command(ProtocolCommand::FetchNode {
+                    self.bus.fetch_command(FetchCommand::FetchNode {
                         path: parent_path.to_vec(),
                         key: parent_key,
                     })
@@ -455,7 +457,7 @@ impl App for GroveDbgApp {
                 let key = self.tree_data.get(path).root_key.as_ref().cloned();
                 if let Some(key) = key {
                     self.tree_data.select_for_merk(path);
-                    self.bus.protocol_command(ProtocolCommand::FetchNode {
+                    self.bus.fetch_command(FetchCommand::FetchNode {
                         path: path.to_vec(),
                         key,
                     });
