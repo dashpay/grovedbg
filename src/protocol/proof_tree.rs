@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, VecDeque};
 
 use anyhow::{anyhow, bail, Context};
-use grovedbg_types::{Element, MerkProofNode, NodeUpdate};
+use grovedbg_types::{Element, MerkProofNode, NodeUpdate, SessionId};
 use reqwest::{Client, Url};
 
 use super::{fetch_node, fetch_root_node};
@@ -29,6 +29,7 @@ pub(crate) struct ProofTree<'a> {
     pub(crate) tree: BTreeMap<Vec<Vec<u8>>, ProofSubtree>,
     client: &'a Client,
     address: &'a Url,
+    session_id: SessionId,
 }
 
 impl<'a> ProofTree<'a> {
@@ -36,6 +37,7 @@ impl<'a> ProofTree<'a> {
         client: &'a Client,
         address: &'a Url,
         proof: grovedbg_types::Proof,
+        session_id: SessionId,
     ) -> anyhow::Result<Self> {
         let mut queue = VecDeque::new();
         queue.push_back((vec![], proof.root_layer));
@@ -55,12 +57,13 @@ impl<'a> ProofTree<'a> {
         let idx = tree[[].as_slice()].root;
         let root_node = tree.get_mut([].as_slice()).unwrap().tree.get_mut(idx).unwrap();
 
-        root_node.node_update = fetch_root_node(client, address).await?;
+        root_node.node_update = fetch_root_node(client, address, session_id).await?;
 
         Ok(Self {
             tree,
             client,
             address,
+            session_id,
         })
     }
 
@@ -90,7 +93,14 @@ impl<'a> ProofTree<'a> {
                 let Some(left_child) = node_update.left_child else {
                     bail!("proof tree contains left child, but actual data doesn't")
                 };
-                let update = fetch_node(self.client, self.address, path.clone(), left_child.clone()).await?;
+                let update = fetch_node(
+                    self.client,
+                    self.address,
+                    self.session_id,
+                    path.clone(),
+                    left_child.clone(),
+                )
+                .await?;
                 if let Some(NodeUpdate {
                     element:
                         Element::Subtree {
@@ -107,8 +117,14 @@ impl<'a> ProofTree<'a> {
                     let mut new_path = path.clone();
                     new_path.push(left_child);
                     if let Some(subtree) = self.tree.get_mut(&new_path) {
-                        subtree.tree[subtree.root].node_update =
-                            fetch_node(self.client, self.address, new_path, root_key.clone()).await?;
+                        subtree.tree[subtree.root].node_update = fetch_node(
+                            self.client,
+                            self.address,
+                            self.session_id,
+                            new_path,
+                            root_key.clone(),
+                        )
+                        .await?;
                     };
                 }
 
@@ -126,7 +142,14 @@ impl<'a> ProofTree<'a> {
                 let Some(right_child) = node_update.right_child else {
                     bail!("proof tree contains right child, but actual data doesn't")
                 };
-                let update = fetch_node(self.client, self.address, path.clone(), right_child.clone()).await?;
+                let update = fetch_node(
+                    self.client,
+                    self.address,
+                    self.session_id,
+                    path.clone(),
+                    right_child.clone(),
+                )
+                .await?;
                 if let Some(NodeUpdate {
                     element:
                         Element::Subtree {
@@ -143,8 +166,14 @@ impl<'a> ProofTree<'a> {
                     let mut new_path = path.clone();
                     new_path.push(right_child);
                     if let Some(subtree) = self.tree.get_mut(&new_path) {
-                        subtree.tree[subtree.root].node_update =
-                            fetch_node(self.client, self.address, new_path, root_key.clone()).await?;
+                        subtree.tree[subtree.root].node_update = fetch_node(
+                            self.client,
+                            self.address,
+                            self.session_id,
+                            new_path,
+                            root_key.clone(),
+                        )
+                        .await?;
                     };
                 }
 

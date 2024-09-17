@@ -8,7 +8,7 @@ use crate::{
     bytes_utils::BytesInputVariant,
     path_ctx::{path_label, Path, PathCtx},
     profiles::RootActiveProfileContext,
-    protocol::ProtocolCommand,
+    protocol::FetchCommand,
 };
 
 const MARGIN: f32 = 20.;
@@ -65,7 +65,7 @@ impl QueryBuilder {
             },
         };
 
-        bus.protocol_command(ProtocolCommand::ProvePathQuery { path_query });
+        bus.fetch_command(FetchCommand::ProvePathQuery { path_query });
     }
 
     fn fetch_query(&self, path: &Path, bus: &CommandBus) {
@@ -78,7 +78,7 @@ impl QueryBuilder {
             },
         };
 
-        bus.protocol_command(ProtocolCommand::FetchWithPathQuery { path_query });
+        bus.fetch_command(FetchCommand::FetchWithPathQuery { path_query });
     }
 }
 

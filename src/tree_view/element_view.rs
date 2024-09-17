@@ -8,7 +8,7 @@ use super::{ElementViewContext, NODE_WIDTH};
 use crate::{
     bytes_utils::{binary_label, binary_label_colored, bytes_by_display_variant, BytesDisplayVariant},
     path_ctx::{full_path_display, full_path_display_iter},
-    protocol::ProtocolCommand,
+    protocol::FetchCommand,
     theme::element_to_color,
 };
 
@@ -103,12 +103,10 @@ impl ElementView {
                 .on_hover_text("Refetch the node")
                 .clicked()
             {
-                element_view_context
-                    .bus
-                    .protocol_command(ProtocolCommand::FetchNode {
-                        path: element_view_context.path().to_vec(),
-                        key: self.key.clone(),
-                    });
+                element_view_context.bus.fetch_command(FetchCommand::FetchNode {
+                    path: element_view_context.path().to_vec(),
+                    key: self.key.clone(),
+                });
             }
             if key_line
                 .button(egui_phosphor::regular::HASH)

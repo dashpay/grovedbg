@@ -9,7 +9,7 @@ use crate::{
     bus::CommandBus,
     path_ctx::Path,
     profiles::ActiveProfileSubtreeContext,
-    protocol::ProtocolCommand,
+    protocol::FetchCommand,
     theme::proof_node_color,
     tree_data::{SubtreeData, SubtreeProofData},
     tree_view::{ElementView, ElementViewContext, SubtreeElements, NODE_WIDTH},
@@ -128,7 +128,7 @@ impl MerkView {
                                         .or_insert_with(|| ElementView::new_placeholder(left.clone()))
                                         .merk_visible = true;
 
-                                    bus.protocol_command(ProtocolCommand::FetchNode {
+                                    bus.fetch_command(FetchCommand::FetchNode {
                                         path: path.to_vec(),
                                         key: left.clone(),
                                     });
@@ -162,7 +162,7 @@ impl MerkView {
                                         .or_insert_with(|| ElementView::new_placeholder(right.clone()))
                                         .merk_visible = true;
 
-                                    bus.protocol_command(ProtocolCommand::FetchNode {
+                                    bus.fetch_command(FetchCommand::FetchNode {
                                         path: path.to_vec(),
                                         key: right.clone(),
                                     });
