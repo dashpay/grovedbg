@@ -1,5 +1,6 @@
 use std::{cell::Cell, fmt::Write, hash::Hash};
 
+use dpp::serialization::PlatformDeserializable;
 use eframe::egui::{self, Color32, Label, RichText, Sense, TextEdit};
 use integer_encoding::VarInt;
 use serde::{Deserialize, Serialize};
@@ -26,6 +27,10 @@ pub(crate) enum BytesDisplayVariant {
     UnsignedInt,
     #[strum(serialize = "Variable length integer")]
     VarInt,
+    #[strum(serialize = "Drive timestamp")]
+    DriveTimestamp,
+    #[strum(serialize = "DPP Vote Poll")]
+    DppVotePoll,
 }
 
 impl BytesDisplayVariant {
@@ -317,6 +322,33 @@ fn bytes_as_varint(bytes: &[u8]) -> String {
         .unwrap_or_else(|| "varint: MSB".to_owned())
 }
 
+fn bytes_as_drive_timestamp(bytes: &[u8]) -> String {
+    TryInto::<[u8; 8]>::try_into(bytes)
+        .ok()
+        .and_then(|mut arr| {
+            arr[0] ^= 0b1000_0000;
+            chrono::DateTime::from_timestamp_millis(i64::from_be_bytes(arr))
+                .map(|dt| format!("{}", dt.naive_utc()))
+        })
+        .unwrap_or_else(|| "[E]: must be 8 bytes".into())
+}
+
+fn bytes_as_dpp_vote_poll_line(bytes: &[u8]) -> String {
+    bytes_as_dpp_vote_poll(bytes)
+        .and_then(|vp| serde_json::to_string(&vp).ok())
+        .unwrap_or_else(|| "[E] unable to deserialize as VotePoll".to_owned())
+}
+
+fn bytes_as_dpp_vote_poll_pretty(bytes: &[u8]) -> String {
+    bytes_as_dpp_vote_poll(bytes)
+        .and_then(|vp| serde_json::to_string_pretty(&vp).ok())
+        .unwrap_or_else(|| "[E] unable to deserialize as VotePoll".to_owned())
+}
+
+pub(crate) fn bytes_as_dpp_vote_poll(bytes: &[u8]) -> Option<dpp::voting::vote_polls::VotePoll> {
+    dpp::voting::vote_polls::VotePoll::deserialize_from_bytes(bytes).ok()
+}
+
 pub(crate) fn bytes_by_display_variant(bytes: &[u8], display_variant: &BytesDisplayVariant) -> String {
     if bytes.is_empty() {
         "empty".to_owned()
@@ -328,6 +360,8 @@ pub(crate) fn bytes_by_display_variant(bytes: &[u8], display_variant: &BytesDisp
             BytesDisplayVariant::SignedInt => bytes_as_signed_int(bytes),
             BytesDisplayVariant::UnsignedInt => bytes_as_unsigned_int(bytes),
             BytesDisplayVariant::VarInt => format!("varint: {}", bytes_as_varint(bytes)),
+            BytesDisplayVariant::DriveTimestamp => bytes_as_drive_timestamp(bytes),
+            BytesDisplayVariant::DppVotePoll => bytes_as_dpp_vote_poll_line(bytes),
         }
     }
 }
@@ -343,5 +377,7 @@ pub(crate) fn bytes_by_display_variant_explicit(
         BytesDisplayVariant::SignedInt => bytes_as_signed_int(bytes),
         BytesDisplayVariant::UnsignedInt => bytes_as_unsigned_int(bytes),
         BytesDisplayVariant::VarInt => bytes_as_varint(bytes),
+        BytesDisplayVariant::DriveTimestamp => bytes_as_drive_timestamp(bytes),
+        BytesDisplayVariant::DppVotePoll => bytes_as_dpp_vote_poll_pretty(bytes),
     }
 }
