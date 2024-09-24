@@ -6,7 +6,10 @@ use reference_view::draw_reference;
 
 use super::{ElementViewContext, NODE_WIDTH};
 use crate::{
-    bytes_utils::{binary_label, binary_label_colored, bytes_by_display_variant, BytesDisplayVariant},
+    bytes_utils::{
+        binary_label, binary_label_colored, bytes_as_dpp_vote_poll, bytes_by_display_variant,
+        BytesDisplayVariant,
+    },
     path_ctx::{full_path_display, full_path_display_iter},
     protocol::FetchCommand,
     theme::element_to_color,
@@ -147,7 +150,18 @@ impl ElementView {
             |value_ui: &mut egui::Ui| {
                 match &self.value {
                     ElementOrPlaceholder::Element(Element::Item { value, element_flags }) => {
-                        binary_label(value_ui, value, &mut self.value_display);
+                        let mut profile_display = element_view_context.profile_ctx().value_display(&self.key);
+
+                        let display = profile_display.as_mut().unwrap_or(&mut self.value_display);
+
+                        binary_label(value_ui, value, display);
+                        if matches!(display, BytesDisplayVariant::DppVotePoll) {
+                            if let Some(json) =
+                                bytes_as_dpp_vote_poll(value).and_then(|v| serde_json::to_value(v).ok())
+                            {
+                                egui_json_tree::JsonTree::new("json-view", &json).show(value_ui);
+                            }
+                        }
                         if let Some(flags) = element_flags {
                             value_ui.horizontal(|line| {
                                 line.label("Flags:");

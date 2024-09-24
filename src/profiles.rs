@@ -65,6 +65,7 @@ struct ProfileEntry {
     sub_items: Vec<ProfileEntry>,
     display: BytesDisplayVariant,
     collapsed: bool,
+    value_display: Option<BytesDisplayVariant>,
 }
 
 type ToDelete = bool;
@@ -127,10 +128,11 @@ impl ProfileEntry {
                         }
                     }
 
-                    if line
-                        .button(egui_phosphor::regular::TRASH_SIMPLE)
-                        .on_hover_text("Delete profile entry")
-                        .clicked()
+                    if !read_only
+                        && line
+                            .button(egui_phosphor::regular::TRASH_SIMPLE)
+                            .on_hover_text("Delete profile entry")
+                            .clicked()
                     {
                         to_delete = true;
                     }
@@ -168,12 +170,38 @@ impl ProfileEntry {
                                 Label::new(format!("Show as: {}", self.display.as_ref())),
                             );
                         } else {
-                            frame.collapsing("Captured value display", |collapsing| {
+                            frame.collapsing("Captured key display", |collapsing| {
                                 self.display.draw(collapsing);
                             });
                         }
                     }
 
+                    if read_only {
+                        frame.label(format!(
+                            "Value display: {}",
+                            self.value_display.as_ref().map(AsRef::as_ref).unwrap_or("unset")
+                        ));
+                    } else {
+                        frame.horizontal(|line| {
+                            let checkbox_before = self.value_display.is_some();
+                            let mut checkbox = checkbox_before;
+                            line.checkbox(&mut checkbox, "");
+                            if checkbox != checkbox_before {
+                                if checkbox {
+                                    self.value_display = Some(BytesDisplayVariant::Hex);
+                                } else {
+                                    self.value_display = None;
+                                }
+                            }
+                            if let Some(vd) = self.value_display.as_mut() {
+                                line.collapsing("Value display", |collapsing| {
+                                    vd.draw(collapsing);
+                                });
+                            } else {
+                                line.label("Value display");
+                            }
+                        });
+                    }
                     draw_entries(frame, bus, &mut self.sub_items, read_only, self_path);
                 });
         }
@@ -189,15 +217,15 @@ fn key_as_alias(key: &ProfileEntryKey) -> Option<Vec<u8>> {
     }
 }
 
-fn default_profiles() -> Vec<Profile> {
-    let mut profiles = Vec::new();
-    profiles.push(Profile {
+fn drive_profile() -> Profile {
+    Profile {
         name: DRIVE.to_owned(),
         entries: vec![
             ProfileEntry {
                 key: vec![64].into(),
                 collapsed: true,
                 alias: "Data contract documents".to_string(),
+                value_display: None,
                 sub_items: Vec::default(),
                 display: BytesDisplayVariant::U8,
             },
@@ -205,10 +233,12 @@ fn default_profiles() -> Vec<Profile> {
                 key: vec![32].into(),
                 collapsed: true,
                 alias: "Identities".to_string(),
+                value_display: None,
                 sub_items: vec![ProfileEntry {
                     key: ProfileEntryKey::Capture,
                     collapsed: true,
                     alias: "ID {}".to_owned(),
+                    value_display: None,
                     sub_items: Vec::default(),
                     display: BytesDisplayVariant::Hex,
                 }],
@@ -218,6 +248,7 @@ fn default_profiles() -> Vec<Profile> {
                 key: vec![24].into(),
                 collapsed: true,
                 alias: "Unique public key hashes to identities".to_string(),
+                value_display: None,
                 sub_items: Vec::default(),
                 display: BytesDisplayVariant::U8,
             },
@@ -225,6 +256,7 @@ fn default_profiles() -> Vec<Profile> {
                 key: vec![8].into(),
                 collapsed: true,
                 alias: "Non-unique public key Key hashes to identities".to_string(),
+                value_display: None,
                 sub_items: Vec::default(),
                 display: BytesDisplayVariant::U8,
             },
@@ -232,6 +264,7 @@ fn default_profiles() -> Vec<Profile> {
                 key: vec![48].into(),
                 collapsed: true,
                 alias: "Pools".to_string(),
+                value_display: None,
                 sub_items: Vec::default(),
                 display: BytesDisplayVariant::U8,
             },
@@ -239,6 +272,7 @@ fn default_profiles() -> Vec<Profile> {
                 key: vec![40].into(),
                 collapsed: true,
                 alias: "Pre funded specialized balances".to_string(),
+                value_display: None,
                 sub_items: Vec::default(),
                 display: BytesDisplayVariant::U8,
             },
@@ -246,6 +280,7 @@ fn default_profiles() -> Vec<Profile> {
                 key: vec![72].into(),
                 collapsed: true,
                 alias: "Spent asset lock transactions".to_string(),
+                value_display: None,
                 sub_items: Vec::default(),
                 display: BytesDisplayVariant::U8,
             },
@@ -253,6 +288,7 @@ fn default_profiles() -> Vec<Profile> {
                 key: vec![104].into(),
                 collapsed: true,
                 alias: "Misc".to_string(),
+                value_display: None,
                 sub_items: Vec::default(),
                 display: BytesDisplayVariant::U8,
             },
@@ -260,6 +296,7 @@ fn default_profiles() -> Vec<Profile> {
                 key: vec![80].into(),
                 collapsed: true,
                 alias: "Withdrawal transactions".to_string(),
+                value_display: None,
                 sub_items: Vec::default(),
                 display: BytesDisplayVariant::U8,
             },
@@ -267,6 +304,7 @@ fn default_profiles() -> Vec<Profile> {
                 key: vec![96].into(),
                 collapsed: true,
                 alias: "Balances".to_string(),
+                value_display: None,
                 sub_items: Vec::default(),
                 display: BytesDisplayVariant::U8,
             },
@@ -274,6 +312,7 @@ fn default_profiles() -> Vec<Profile> {
                 key: vec![16].into(),
                 collapsed: true,
                 alias: "Token balances".to_string(),
+                value_display: None,
                 sub_items: Vec::default(),
                 display: BytesDisplayVariant::U8,
             },
@@ -281,6 +320,7 @@ fn default_profiles() -> Vec<Profile> {
                 key: vec![120].into(),
                 collapsed: true,
                 alias: "Versions".to_string(),
+                value_display: None,
                 sub_items: Vec::default(),
                 display: BytesDisplayVariant::U8,
             },
@@ -288,14 +328,34 @@ fn default_profiles() -> Vec<Profile> {
                 key: vec![112].into(),
                 collapsed: true,
                 alias: "Votes".to_string(),
-                sub_items: Vec::default(),
+                value_display: None,
+                sub_items: vec![ProfileEntry {
+                    key: vec![101].into(),
+                    collapsed: true,
+                    alias: "Voting end dates".to_owned(),
+                    value_display: None,
+                    sub_items: vec![ProfileEntry {
+                        key: ProfileEntryKey::Capture,
+                        alias: "{}".to_owned(),
+                        sub_items: vec![ProfileEntry {
+                            key: ProfileEntryKey::Capture,
+                            alias: "{}".to_owned(),
+                            sub_items: Vec::default(),
+                            display: BytesDisplayVariant::U8,
+                            collapsed: true,
+                            value_display: Some(BytesDisplayVariant::DppVotePoll),
+                        }],
+                        value_display: None,
+                        display: BytesDisplayVariant::DriveTimestamp,
+                        collapsed: true,
+                    }],
+                    display: BytesDisplayVariant::U8,
+                }],
                 display: BytesDisplayVariant::U8,
             },
         ],
         read_only: true,
-    });
-
-    profiles
+    }
 }
 
 fn draw_entries<'pa>(
@@ -327,7 +387,7 @@ struct Profile {
     read_only: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub(crate) struct ProfilesView {
     profiles: Vec<Profile>,
     selected: usize,
@@ -341,7 +401,7 @@ impl ProfilesView {
     }
 
     pub(crate) fn restore(storage: Option<&dyn Storage>) -> Self {
-        storage
+        let mut profiles_view: Self = storage
             .and_then(|s| s.get_string(PROFILES_KEY))
             .and_then(|param| {
                 serde_json::from_str(&param)
@@ -350,10 +410,15 @@ impl ProfilesView {
                     })
                     .ok()
             })
-            .unwrap_or_else(|| ProfilesView {
-                profiles: default_profiles(),
-                selected: 0,
-            })
+            .unwrap_or_default();
+
+        if profiles_view.profiles.len() > 0 {
+            profiles_view.profiles[0] = drive_profile();
+        } else {
+            profiles_view.profiles.push(drive_profile());
+        }
+
+        profiles_view
     }
 
     pub(crate) fn draw<'pa>(&mut self, ui: &mut egui::Ui, bus: &CommandBus<'pa>, path_ctx: &'pa PathCtx) {
@@ -516,6 +581,17 @@ impl<'pf> ActiveProfileSubtreeContext<'pf> {
                 ProfileEntryKey::Key(_) => e.alias.clone(),
                 ProfileEntryKey::Capture => e.alias.replace("{}", &bytes_by_display_variant(key, &e.display)),
             })
+    }
+
+    pub(crate) fn value_display(&self, key: &[u8]) -> Option<BytesDisplayVariant> {
+        self.entries
+            .into_iter()
+            .flatten()
+            .find(|x| match &x.key {
+                ProfileEntryKey::Key(bytes) => bytes.get_bytes() == key,
+                ProfileEntryKey::Capture => true,
+            })
+            .and_then(|e| e.value_display)
     }
 
     pub(crate) fn path_segments_aliases(&self) -> &[Option<String>] {
