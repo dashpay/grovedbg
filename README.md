@@ -128,25 +128,50 @@ Each node in this acyclic graph represents an individual subtree within GroveDB.
 displayed vertically, with subtrees appearing lower in the hierarchy indicating deeper levels within the HADS. Orange
 lines illustrate connections between parents and their respective children.
 
-These nodes consts of vertically split sections.
+These nodes consist of vertically split sections.
 
 #### Controls
 
-1. __10__ : fetch first 10 items of the subtree;
-2. __100__ : fetch first 100 items of the subtree;
+1. __10__ : Fetch the first 10 items of the subtree.
+2. __100__ : Fetch the first 100 items of the subtree.
 3. <picture>
      <source media="(prefers-color-scheme: dark)" srcset="docs/button_database_dark.png">
      <source media="(prefers-color-scheme: light)" srcset="docs/button_database_light.png">
      <img alt="DB button" src="docs/button_database_light.png">
-   </picture> : fetch whole subtree, sometimes it might be too much  
-4. 
-5. 
-6. 
-7. 
+   </picture> : Fetch the entire subtree. Be cautious, as this might be too much data.
+4. <picture>
+     <source media="(prefers-color-scheme: dark)" srcset="docs/button_fetch_root_dark.png">
+     <source media="(prefers-color-scheme: light)" srcset="docs/button_fetch_root_light.png">
+     <img alt="Fetch root button" src="docs/button_fetch_root_light.png">
+   </picture> : Fetch the subtree's root node. Since the root node key is inherited from the parent, this button may be
+   inaccessible if the fetched part of the parent subtree doesn't include this information.
+5. <picture>
+     <source media="(prefers-color-scheme: dark)" srcset="docs/button_clear_dark.png">
+     <source media="(prefers-color-scheme: light)" srcset="docs/button_clear_light.png">
+     <img alt="Clear button" src="docs/button_clear_light.png">
+   </picture> : Clear subtree data to save space.
+6. <picture>
+     <source media="(prefers-color-scheme: dark)" srcset="docs/button_query_dark.png">
+     <source media="(prefers-color-scheme: light)" srcset="docs/button_query_light.png">
+     <img alt="Query button" src="docs/button_query_light.png">
+   </picture> : Select this subtree for a path query (more on the query builder later).
+7. <picture>
+     <source media="(prefers-color-scheme: dark)" srcset="docs/button_merk_dark.png">
+     <source media="(prefers-color-scheme: light)" srcset="docs/button_merk_light.png">
+     <img alt="Merk button" src="docs/button_merk_light.png">
+   </picture> : Select this subtree for the Merk view to visualize the subtree as a binary tree, which it actually is.
 
 #### Path
 
+Comma-separated keys of subtrees starting from the root tree form a path to this subtree. Keys are listed as they appear
+in ancestors, with chosen binary representations and profiles applied. We've already covered binary representations, and
+we'll cover profiles later.
+
 #### Element*
+
+Horizontally separated sections, each dedicated to a key-value pair in the subtree, with additional controls and
+variable coloring depending on the element type.
 
 #### Pagination controls
 
+The number of elements shown is limited to 10 per page.
