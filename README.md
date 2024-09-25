@@ -110,3 +110,39 @@ __right mouse click__ on any data (key/value/bytes input).
     <img alt="Root subtree with root node fetched." src="docs/root_subtree_light.png">
   </picture>
 </details>
+
+### Subtree view
+
+The subtree view is the primary navigation area for GroveDB's structure and remains uncollapsed at all times.
+
+<details>
+  <summary>Subtrees example</summary>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/subtrees_dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/subtrees_light.png">
+    <img alt="Multiple subtrees" src="docs/subtrees_light.png">
+  </picture>
+</details>
+
+Each node in this acyclic graph represents an individual subtree within GroveDB. The parent-child relationships are
+displayed vertically, with subtrees appearing lower in the hierarchy indicating deeper levels within the HADS. Orange
+lines illustrate connections between parents and their respective children.
+
+These nodes consts of vertically split sections.
+
+#### Controls
+
+1. __10__ : fetch first 10 items of the subtree;
+2. __100__ : fetch first 100 items of the subtree;
+3. <img src="https://github.com/FortAwesome/Font-Awesome/raw/refs/heads/6.x/svgs/solid/database.svg">
+4. 
+5. 
+6. 
+7. 
+
+#### Path
+
+#### Element*
+
+#### Pagination controls
+
