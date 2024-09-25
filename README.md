@@ -134,7 +134,13 @@ These nodes consts of vertically split sections.
 
 1. __10__ : fetch first 10 items of the subtree;
 2. __100__ : fetch first 100 items of the subtree;
-3. <img src="https://github.com/FortAwesome/Font-Awesome/raw/refs/heads/6.x/svgs/solid/database.svg" style="filter: invert(1);">
+3. 
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/button_database_dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/button_database_light.png">
+    <img alt="DB button" src="docs/button_database_light.png">
+  </picture> 
+  : fetch whole subtree, sometimes it might be too much  
 4. 
 5. 
 6. 
