@@ -125,10 +125,15 @@ The subtree view is the primary navigation area for GroveDB's structure and rema
 </details>
 
 Each node in this acyclic graph represents an individual subtree within GroveDB. The parent-child relationships are
-displayed vertically, with subtrees appearing lower in the hierarchy indicating deeper levels within the HADS. Orange
-lines illustrate connections between parents and their respective children.
+displayed vertically, with subtrees appearing lower in the hierarchy indicating deeper levels within the HADS. These
+nodes consist of vertically split sections.
 
-These nodes consist of vertically split sections.
+__Orange__ lines illustrate connections between parents and their respective children. 
+
+__Blue__ lines represent references, indicating that an item in one subtree is a reference to another item in a
+different subtree. Since this is not a parent-child relationship, arrows are used to make the connection more visually
+distinct.
+
 
 #### Controls
 
@@ -172,6 +177,65 @@ we'll cover profiles later.
 Horizontally separated sections, each dedicated to a key-value pair in the subtree, with additional controls and
 variable coloring depending on the element type.
 
+Common controls include:
+
+1. <picture>
+     <source media="(prefers-color-scheme: dark)" srcset="docs/button_refetch_dark.png">
+     <source media="(prefers-color-scheme: light)" srcset="docs/button_refetch_light.png">
+     <img alt="refetch button" src="docs/button_refetch_light.png">
+   </picture> : Re-fetch this element by path and key.
+2. <picture>
+     <source media="(prefers-color-scheme: dark)" srcset="docs/button_hash_dark.png">
+     <source media="(prefers-color-scheme: light)" srcset="docs/button_hash_light.png">
+     <img alt="hash button" src="docs/button_hash_light.png">
+   </picture> : Show fetched (unvalidated) hash data.
+
+##### Subtree (orange)
+
+Keys of the subtree representing child subtrees.
+
+Controls: 
+
+1. __Checkbox__ : show/hide the child subtree.
+2. <picture>
+     <source media="(prefers-color-scheme: dark)" srcset="docs/button_jump_dark.png">
+     <source media="(prefers-color-scheme: light)" srcset="docs/button_jump_light.png">
+     <img alt="jump button" src="docs/button_jump_light.png">
+   </picture> : Center the subtrees screen on the selected subtree.
+
+##### Item (gray)
+
+A standard key-value pair of bytes, where the interpretation depends on the specific application using GroveDB.
+
+##### Sum Item (dark green)
+
+An integer value. Although integers could be stored as byte values within the Item variant, Sum Items receive special
+handling in Sum Trees, which we'll discuss shortly.
+
+##### Sum Tree (green)
+
+A child subtree where the values of all Sum Items within it are added together. As a subtree, it shares the same
+controls.
+
+##### Reference (blue)
+
+A reference to a specific key within a particular subtree. By default, it is displayed as an absolute path.
+
+Controls:
+
+1. <picture>
+     <source media="(prefers-color-scheme: dark)" srcset="docs/button_refdef_dark.png">
+     <source media="(prefers-color-scheme: light)" srcset="docs/button_refdef_light.png">
+     <img alt="refdef button" src="docs/button_refdef_light.png">
+   </picture> : Displays the reference definition along with the resolved absolute path. Most reference types are
+   relative, and these details will be shown if necessary.
+2. <picture>
+     <source media="(prefers-color-scheme: dark)" srcset="docs/button_jump_dark.png">
+     <source media="(prefers-color-scheme: light)" srcset="docs/button_jump_light.png">
+     <img alt="jump button" src="docs/button_jump_light.png">
+   </picture> : Navigate directly to the referenced subtree.
+
 #### Pagination controls
 
-The number of elements shown is limited to 10 per page.
+The number of elements shown is limited to 10 per page to ensure predictable node sizes. Arrows are used to navigate
+between pages.
