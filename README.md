@@ -239,3 +239,20 @@ Controls:
 
 The number of elements shown is limited to 10 per page to ensure predictable node sizes. Arrows are used to navigate
 between pages.
+
+### Merk View
+
+<details>
+  <summary>Merk view example</summary>
+
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/merk_view_dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/merk_view_light.png">
+    <img alt="Merk view" src="docs/merk_view_light.png">
+  </picture>
+</details>
+
+All elements within a subtree are displayed as a list in the subtree view, but this view conceals the actual arrangement
+of the subtrees. This is where the Merk view becomes essential, as it transitions from a simple list of elements to
+the true binary tree structure. It's important to note that proofs in GroveDB are based on this structure, making the
+Merk view crucial for accurately inspecting proofs.
