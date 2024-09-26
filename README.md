@@ -256,3 +256,15 @@ All elements within a subtree are displayed as a list in the subtree view, but t
 of the subtrees. This is where the Merk view becomes essential, as it transitions from a simple list of elements to
 the true binary tree structure. It's important to note that proofs in GroveDB are based on this structure, making the
 Merk view crucial for accurately inspecting proofs.
+
+Each node is shown like the elements in the subtree view, at least in the top part, so there's nothing new to mention.
+
+The bottom part, below the horizontal line, is related to a received proof, with color coding as follows:
+
+1. **Purple** nodes are subtree elements combined with the latest proof data. Even if the proof only provides a hash,
+   GroveDBG requests the actual data for a clearer view. To avoid confusion, the subtree data is listed at the top of the
+   node, while the proof data is shown below.
+
+2. **Gray** nodes are those that aren't included in proofs and are fetched manually.
+
+The arrows below are used to fetch the left and right child nodes, respectively.
