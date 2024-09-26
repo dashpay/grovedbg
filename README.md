@@ -111,6 +111,8 @@ This feature is used almost _everywhere_ in the application, which is why we int
   </picture>
 </details>
 
+**Note on u8 array inputs**: Values are space-separated. For example, to write "grove," you would enter `103 114 111 118 101`.
+
 ### Subtree view
 
 The subtree view is the primary navigation area for GroveDB's structure and remains uncollapsed at all times.
@@ -324,3 +326,82 @@ root, the number of layers matches the depth of the requested data.
   <img alt="Merk button" src="docs/button_merk_light.png">
 </picture>: this button can be used to show that part of the proof on Merk view, because keys on those proof layers are
 actually subtrees.
+
+### Profiles
+
+A subsystem designed to set aliases and default byte representations for keys and values.
+
+#### Profiles list
+
+At the top of the profiles panel, you can select one profile at a time and manage them as follows:
+
+1. **Radio**: Choose the currently active profile.
+2. **Name**: Rename the selected profile.
+3. <picture>
+     <source media="(prefers-color-scheme: dark)" srcset="docs/button_copy_dark.png">
+     <source media="(prefers-color-scheme: light)" srcset="docs/button_copy_light.png">
+     <img alt="copy button" src="docs/button_copy_light.png">
+   </picture>: Copy the profile.
+4. <picture>
+     <source media="(prefers-color-scheme: dark)" srcset="docs/button_delete_dark.png">
+     <source media="(prefers-color-scheme: light)" srcset="docs/button_delete_light.png">
+     <img alt="delete button" src="docs/button_delete_light.png">
+   </picture>: Delete the profile.
+
+#### Profile Entries list
+
+The remainder of the profiles panel displays the profile entries, with a **+** button at the end to add another entry
+(available when a non-default profile is selected, as those are read-only).
+
+Each entry initially offers two controls:
+
+1. <picture>
+     <source media="(prefers-color-scheme: dark)" srcset="docs/button_edit_dark.png">
+     <source media="(prefers-color-scheme: light)" srcset="docs/button_edit_light.png">
+     <img alt="edit button" src="docs/button_edit_light.png">
+   </picture>: Edit the profile.
+2. <picture>
+     <source media="(prefers-color-scheme: dark)" srcset="docs/button_jump_dark.png">
+     <source media="(prefers-color-scheme: light)" srcset="docs/button_jump_light.png">
+     <img alt="jump button" src="docs/button_jump_light.png">
+   </picture>:  Center the subtrees screen on the selected subtree if profile the entry matches any.
+
+#### Profile Entry Editor
+
+Opening a profile editor prvoides even more controls at our displosal:
+
+1. <picture>
+     <source media="(prefers-color-scheme: dark)" srcset="docs/button_delete_dark.png">
+     <source media="(prefers-color-scheme: light)" srcset="docs/button_delete_light.png">
+     <img alt="delete button" src="docs/button_delete_light.png">
+   </picture>: Delete the profile entry.
+2. **Alias**: A synonym, with a format that will be explained later.
+3. **Key/Capture**: Defines how this profile entry is matched; this will be covered along with aliases later.
+4. <picture>
+     <source media="(prefers-color-scheme: dark)" srcset="docs/button_add_dark.png">
+     <source media="(prefers-color-scheme: light)" srcset="docs/button_add_light.png">
+     <img alt="add button" src="docs/button_add_light.png">
+   </picture>: Add a nested profile entry.
+5. **Value display**: Opens a dropdown to select the default byte representation when an Item is found at a matched
+   location.
+
+##### Key
+
+Matches an element by its name. For example, if this profile entry is applied to the root tree and you enter `32` in the
+input with the byte representation set to `u8 array`, it will match the element in the root tree with the key `[32]`.
+
+The **Alias** acts as a literal synonym. So, in the root subtree, the element that was previously under key `[32]` will
+now appear with the string you specify in the **Alias** field.
+
+##### Capture
+
+Unlike **Key**, this matches all elements. To differentiate between multiple matches, a special syntax `{}` is used in
+the alias. For example, if you enter `Something {}`, all items in the subtree will have names starting with `Something`,
+with the actual key inserted where `{}` is. The byte representation of the key is selected using the **Captured Key
+Display** dropdown.
+
+##### Nested Entries
+
+Profile entries are recursive, allowing you to match child subtrees of already matched elements, and continue further
+down the hierarchy. This enables you to create a path to a specific subtree using **Key** entries, or apply changes to
+multiple nested subtrees more broadly by using **Capture** when appropriate.
