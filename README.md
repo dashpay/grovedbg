@@ -100,7 +100,7 @@ Bytes can mean anything, and we give tools to choose how to represent them. By d
 choose the appropriate display for received bytes, but this can easily be overridden.
 
 This feature is used almost _everywhere_ in the application, which is why we introduce it early. To access it, use
-__right mouse click__ on any data (key/value/bytes input).
+**right mouse click** on any data (key/value/bytes input).
 
 <details>
   <summary>Root subtree with display choice menu</summary>
@@ -128,17 +128,17 @@ Each node in this acyclic graph represents an individual subtree within GroveDB.
 displayed vertically, with subtrees appearing lower in the hierarchy indicating deeper levels within the HADS. These
 nodes consist of vertically split sections.
 
-__Orange__ lines illustrate connections between parents and their respective children. 
+**Orange** lines illustrate connections between parents and their respective children. 
 
-__Blue__ lines represent references, indicating that an item in one subtree is a reference to another item in a
+**Blue** lines represent references, indicating that an item in one subtree is a reference to another item in a
 different subtree. Since this is not a parent-child relationship, arrows are used to make the connection more visually
 distinct.
 
 
 #### Controls
 
-1. __10__ : Fetch the first 10 items of the subtree.
-2. __100__ : Fetch the first 100 items of the subtree.
+1. **10** : Fetch the first 10 items of the subtree.
+2. **100** : Fetch the first 100 items of the subtree.
 3. <picture>
      <source media="(prefers-color-scheme: dark)" srcset="docs/button_database_dark.png">
      <source media="(prefers-color-scheme: light)" srcset="docs/button_database_light.png">
@@ -196,7 +196,7 @@ Keys of the subtree representing child subtrees.
 
 Controls: 
 
-1. __Checkbox__ : show/hide the child subtree.
+1. **Checkbox** : show/hide the child subtree.
 2. <picture>
      <source media="(prefers-color-scheme: dark)" srcset="docs/button_jump_dark.png">
      <source media="(prefers-color-scheme: light)" srcset="docs/button_jump_light.png">
@@ -268,3 +268,59 @@ The bottom part, below the horizontal line, is related to a received proof, with
 2. **Gray** nodes are those that aren't included in proofs and are fetched manually.
 
 The arrows below are used to fetch the left and right child nodes, respectively.
+
+### Query builder
+
+Path Queries, as we refer to them here, are used to retrieve data from GroveDB, either directly or with cryptographic
+proof. This proof can later be viewed in the Merk view for each subtree involved (referred to as a "proof layer") or
+using a Proof Viewer that we will cover later. For now, let's focus on the Query Builder.
+
+To create a path query, we need two main components:
+
+1. **Path**: This is selected using the "Select for Merk" button located at the top of the desired node in the subtree
+   view.
+2. **Query**: The specific query for the subtree.
+
+Additionally, an indefinite number of recursive subqueries can be included, allowing for deeper navigation into the
+subtree hierarchy using paths that are relative to the "parent" query.
+
+#### Query
+
+Now that we've covered the path, the query consists of the following elements:
+
+1. **Limit**: Restricts the number of returned elements (data). In the case of a proof, all parts of the Merkle path are
+   still required, but nodes with actual values are limited to this number.
+2. **Offset**: Skips a specified number of elements in the queryset, but this option is not available for proofs.
+3. **Left to Right**: Determines the order of the queryset. For example, if this flag is not set and the limit is 1,
+   only the last item in the queryset will be returned.
+4. **Query Items**: You can add conditions for selecting items in the subtree using the **+** and **-** buttons.
+   Conditions are set with a dropdown, and if an input like a `Key` query item requires additional information, remember
+   that inputs support **byte representations**, meaning the same input can have different interpretations.
+5. **Default Subquery**: When enabled, a default subquery form will be available, which we will discuss shortly.
+6. **Subquery Branches**: A more advanced version of the default subquery, which will also be covered shortly.
+
+##### Default subquery
+
+**For each** subtree item in the queryset, we can apply an additional query by specifying a relative **Path** through
+adding or removing path segment inputs. Each subtree identified in this manner can then have this subquery applied,
+following the same structure as the parent query.
+
+##### Subquery branches
+
+While the default subquery is applied to every subtree by appending a relative path, a subquery branch acts as a
+conditional subquery. This means that the top part of this nested form is used to filter the subtrees first, ensuring
+that the subquery is only applied to those that remain, similar to what was described in the default subquery section.
+
+### Proof Viewer
+
+The Proof Viewer displays proofs as they are: a series of operations beginning from the root subtree, which is always
+visible when a proof is available. The lower section, called layers, corresponds to proof layers, with each key being a
+one-to-one relationship to child subtrees, functioning recursively. Since every proof must establish a path to the
+root, the number of layers matches the depth of the requested data.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/button_merk_dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/button_merk_light.png">
+  <img alt="Merk button" src="docs/button_merk_light.png">
+</picture>: this button can be used to show that part of the proof on Merk view, because keys on those proof layers are
+actually subtrees.
