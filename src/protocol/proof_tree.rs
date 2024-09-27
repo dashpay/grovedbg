@@ -59,6 +59,32 @@ impl<'a> ProofTree<'a> {
 
         root_node.node_update = fetch_root_node(client, address, session_id).await?;
 
+        if let Some(NodeUpdate {
+            key,
+            element:
+                Element::Subtree {
+                    root_key: Some(root_key),
+                    ..
+                }
+                | Element::Sumtree {
+                    root_key: Some(root_key),
+                    ..
+                },
+            ..
+        }) = root_node.node_update.clone()
+        {
+            if let Some(subtree) = tree.get_mut([key.to_vec()].as_slice()) {
+                subtree.tree[subtree.root].node_update = fetch_node(
+                    client,
+                    address,
+                    session_id,
+                    [key.to_vec()].to_vec(),
+                    root_key.clone(),
+                )
+                .await?;
+            };
+        }
+
         Ok(Self {
             tree,
             client,
