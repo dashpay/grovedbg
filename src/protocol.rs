@@ -2,6 +2,7 @@ mod proof_tree;
 
 use std::collections::BTreeMap;
 
+use futures::TryFutureExt;
 use grovedbg_types::{
     DropSessionRequest, Key, MerkProofNode, NewSessionResponse, NodeFetchRequest, NodeUpdate, Path,
     PathQuery, Proof, RootFetchRequest, SessionId, WithSession,
@@ -30,6 +31,11 @@ pub async fn start_grovedbg_protocol(
         x = commands_receiver.recv() => x,
         x = feedback_recv.recv() => x,
     } {
+        if let Err(send_error) = updates_sender.send(GroveGdbUpdate::Block).await {
+            log::error!("Unable to send update: {send_error}; terminating the protocol task");
+            return;
+        }
+
         let updates = match process_command(&address, &client, cmd).await {
             Ok(x) => x,
             Err(e) => {
@@ -47,7 +53,11 @@ pub async fn start_grovedbg_protocol(
             }
         };
 
-        if let Err(send_error) = updates_sender.send(updates).await {
+        if let Err(send_error) = updates_sender
+            .send(updates)
+            .and_then(|_| updates_sender.send(GroveGdbUpdate::Unblock))
+            .await
+        {
             log::error!("Unable to send update: {send_error}; terminating the protocol task");
             return;
         }
@@ -83,6 +93,8 @@ pub enum GroveGdbUpdate {
         BTreeMap<Vec<Vec<u8>>, BTreeMap<Key, MerkProofNode>>,
     ),
     Session(SessionId),
+    Block,
+    Unblock,
 }
 
 impl From<Vec<NodeUpdate>> for GroveGdbUpdate {
