@@ -1,6 +1,7 @@
 use std::{borrow::Cow, cmp, fmt::Write};
 
 use eframe::egui::{self, Painter, Pos2, Stroke, Vec2};
+use grovedb_epoch_based_storage_flags::StorageFlags;
 use grovedbg_types::Reference;
 
 use crate::{
@@ -82,7 +83,11 @@ pub(super) fn draw_reference(
     if let Some(flags) = flags {
         ui.horizontal(|line| {
             line.label("Flags:");
-            binary_label(line, flags, flags_display);
+            if let Some(storage_flags) = StorageFlags::deserialize(&flags).ok().flatten() {
+                line.label(format!("{storage_flags}"));
+            } else {
+                binary_label(line, flags, flags_display);
+            }
         });
     }
 

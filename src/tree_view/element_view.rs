@@ -1,6 +1,7 @@
 mod reference_view;
 
 use eframe::egui::{self, Context, Label, Layout, RichText, Vec2};
+use grovedb_epoch_based_storage_flags::StorageFlags;
 use grovedbg_types::{CryptoHash, Element, Key};
 use reference_view::draw_reference;
 
@@ -162,19 +163,31 @@ impl ElementView {
                                 egui_json_tree::JsonTree::new("json-view", &json).show(value_ui);
                             }
                         }
+
                         if let Some(flags) = element_flags {
                             value_ui.horizontal(|line| {
                                 line.label("Flags:");
-                                binary_label(line, flags, &mut self.flags_display);
+                                if let Some(storage_flags) = StorageFlags::deserialize(&flags).ok().flatten()
+                                {
+                                    line.label(format!("{storage_flags}"));
+                                } else {
+                                    binary_label(line, flags, &mut self.flags_display);
+                                }
                             });
                         }
                     }
                     ElementOrPlaceholder::Element(Element::SumItem { value, element_flags }) => {
                         value_ui.label(format!("Value: {value}"));
+
                         if let Some(flags) = element_flags {
                             value_ui.horizontal(|line| {
                                 line.label("Flags:");
-                                binary_label(line, flags, &mut self.flags_display);
+                                if let Some(storage_flags) = StorageFlags::deserialize(&flags).ok().flatten()
+                                {
+                                    line.label(format!("{storage_flags}"));
+                                } else {
+                                    binary_label(line, flags, &mut self.flags_display);
+                                }
                             });
                         }
                     }
@@ -230,7 +243,12 @@ impl ElementView {
                         if let Some(flags) = element_flags {
                             value_ui.horizontal(|line| {
                                 line.label("Flags:");
-                                binary_label(line, flags, &mut self.flags_display);
+                                if let Some(storage_flags) = StorageFlags::deserialize(&flags).ok().flatten()
+                                {
+                                    line.label(format!("{storage_flags}"));
+                                } else {
+                                    binary_label(line, flags, &mut self.flags_display);
+                                }
                             });
                         }
                     }
@@ -251,7 +269,12 @@ impl ElementView {
                         if let Some(flags) = element_flags {
                             value_ui.horizontal(|line| {
                                 line.label("Flags:");
-                                binary_label(line, flags, &mut self.flags_display);
+                                if let Some(storage_flags) = StorageFlags::deserialize(&flags).ok().flatten()
+                                {
+                                    line.label(format!("{storage_flags}"));
+                                } else {
+                                    binary_label(line, flags, &mut self.flags_display);
+                                }
                             });
                         }
                     }
