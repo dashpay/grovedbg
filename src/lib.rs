@@ -104,6 +104,7 @@ struct GroveDbgApp {
     show_merk_view: bool,
     merk_panel_width: f32,
     focused_subtree: Option<FocusedSubree<'static>>,
+    blocked: bool,
 }
 
 const SHOW_QUERY_BUILDER_KEY: &'static str = "show_query_builder";
@@ -155,6 +156,7 @@ impl GroveDbgApp {
                 .unwrap_or(true),
             merk_panel_width: 0.,
             focused_subtree: None,
+            blocked: false,
         }
     }
 
@@ -379,7 +381,7 @@ impl App for GroveDbgApp {
                     self.bus.new_session();
                 }
 
-                if !self.updates_receiver.is_empty() {
+                if self.blocked {
                     line.label("Processing updates...");
                     line.spinner();
                 }
@@ -413,6 +415,8 @@ impl App for GroveDbgApp {
                         self.bus.set_session(session_id);
                         self.bus.fetch_command(FetchCommand::FetchRoot);
                     }
+                    GroveGdbUpdate::Block => self.blocked = true,
+                    GroveGdbUpdate::Unblock => self.blocked = false,
                 }
             } else {
                 log::error!("Protocol thread was terminated, can't receive updates anymore");

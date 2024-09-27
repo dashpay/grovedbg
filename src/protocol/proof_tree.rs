@@ -59,32 +59,6 @@ impl<'a> ProofTree<'a> {
 
         root_node.node_update = fetch_root_node(client, address, session_id).await?;
 
-        if let Some(NodeUpdate {
-            key,
-            element:
-                Element::Subtree {
-                    root_key: Some(root_key),
-                    ..
-                }
-                | Element::Sumtree {
-                    root_key: Some(root_key),
-                    ..
-                },
-            ..
-        }) = root_node.node_update.clone()
-        {
-            if let Some(subtree) = tree.get_mut([key.to_vec()].as_slice()) {
-                subtree.tree[subtree.root].node_update = fetch_node(
-                    client,
-                    address,
-                    session_id,
-                    [key.to_vec()].to_vec(),
-                    root_key.clone(),
-                )
-                .await?;
-            };
-        }
-
         Ok(Self {
             tree,
             client,
@@ -113,6 +87,35 @@ impl<'a> ProofTree<'a> {
             let Some(node_update) = node.node_update.as_ref().cloned() else {
                 bail!("expected node data to be fetched before")
             };
+
+            if let NodeUpdate {
+                key,
+                element:
+                    Element::Subtree {
+                        root_key: Some(root_key),
+                        ..
+                    }
+                    | Element::Sumtree {
+                        root_key: Some(root_key),
+                        ..
+                    },
+                ..
+            } = &node_update
+            {
+                let mut new_path = path.clone();
+                new_path.push(key.clone());
+
+                if let Some(subtree) = self.tree.get_mut(&new_path) {
+                    subtree.tree[subtree.root].node_update = fetch_node(
+                        self.client,
+                        self.address,
+                        self.session_id,
+                        new_path,
+                        root_key.clone(),
+                    )
+                    .await?;
+                };
+            }
 
             if let Some(proof_left) = node.left {
                 queue.push_back(proof_left);
