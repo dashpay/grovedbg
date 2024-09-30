@@ -1,6 +1,4 @@
 //! Subtrees paths manipulation and storage module.
-//! Path identification, comparison, display and shared subtrees properties like
-//! visibility -- all goes through `PathCtx`.
 
 use std::{
     cell::RefCell,
@@ -87,7 +85,6 @@ pub(crate) struct PathSegment {
     bytes: Vec<u8>,
     display: BytesDisplayVariant,
     level: usize,
-    visible: RefCell<bool>,
 }
 
 impl PathSegment {
@@ -97,10 +94,6 @@ impl PathSegment {
 
     pub fn view_by_display(&self) -> String {
         bytes_by_display_variant(&self.bytes, &self.display)
-    }
-
-    pub fn set_visible(&self) {
-        *self.visible.borrow_mut() = true;
     }
 }
 
@@ -144,18 +137,6 @@ impl Ord for Path<'_> {
 impl<'c> Path<'c> {
     pub fn get_ctx(&self) -> &'c PathCtx {
         self.ctx
-    }
-
-    pub fn for_visible_mut<T>(&self, f: impl FnOnce(&mut bool) -> T) -> Option<T> {
-        self.head_slab_id.map(|id| {
-            let slab = self.ctx.slab.borrow();
-            let mut segment_visible = slab[id].visible.borrow_mut();
-            f(&mut segment_visible)
-        })
-    }
-
-    pub fn visible(&self) -> bool {
-        self.for_last_segment(|s| *s.visible.borrow()).unwrap_or_default()
     }
 
     pub fn get_root(&self) -> Path<'c> {
@@ -219,7 +200,6 @@ impl<'c> Path<'c> {
                 display: BytesDisplayVariant::guess(&key),
                 bytes: key,
                 level: level + 1,
-                visible: RefCell::new(false),
             });
             let children_vec = self
                 .head_slab_id

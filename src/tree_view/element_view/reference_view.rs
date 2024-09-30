@@ -95,54 +95,54 @@ pub(super) fn draw_reference(
         draw_reference_details(ui, reference);
     }
 
-    // Draw reference arrow
-    if let Some((rect_from, rect_to)) = (!is_self_reference
-        && referenced_path.for_visible_mut(|v| *v).unwrap_or_default())
-    .then(|| {
-        ui.memory(|mem| {
-            mem.area_rect(element_view_context.path().id())
-                .and_then(|rect_from| {
-                    mem.area_rect(referenced_path.id())
-                        .map(|rect_to| (rect_from, rect_to))
-                })
-        })
-    })
-    .flatten()
-    {
-        let painter = ui.painter();
+    // // Draw reference arrow
+    // if let Some((rect_from, rect_to)) = (!is_self_reference
+    //     && referenced_path.for_visible_mut(|v| *v).unwrap_or_default())
+    // .then(|| {
+    //     ui.memory(|mem| {
+    //         mem.area_rect(element_view_context.path().id())
+    //             .and_then(|rect_from| {
+    //                 mem.area_rect(referenced_path.id())
+    //                     .map(|rect_to| (rect_from, rect_to))
+    //             })
+    //     })
+    // })
+    // .flatten()
+    // {
+    //     let painter = ui.painter();
 
-        fn adjust_y(top_y: f32, mut side_center: Pos2) -> Pos2 {
-            side_center.y = cmp::min_by(side_center.y, top_y + REFERENCE_LINE_TOP_MARGIN, |a, b| {
-                a.partial_cmp(b).unwrap_or(cmp::Ordering::Equal)
-            });
-            side_center
-        }
+    //     fn adjust_y(top_y: f32, mut side_center: Pos2) -> Pos2 {
+    //         side_center.y = cmp::min_by(side_center.y, top_y + REFERENCE_LINE_TOP_MARGIN, |a, b| {
+    //             a.partial_cmp(b).unwrap_or(cmp::Ordering::Equal)
+    //         });
+    //         side_center
+    //     }
 
-        let (from, to) = {
-            if rect_from.center().x < rect_to.center().x {
-                // Left to right arrow
-                (
-                    adjust_y(rect_from.center_top().y, rect_from.right_center()),
-                    adjust_y(rect_to.center_top().y, rect_to.left_center()),
-                )
-            } else {
-                // Right to left arrow
-                (
-                    adjust_y(rect_from.center_top().y, rect_from.left_center()),
-                    adjust_y(rect_to.center_top().y, rect_to.right_center()),
-                )
-            }
-        };
-        arrow(
-            painter,
-            from,
-            to - from,
-            Stroke {
-                width: 1.0,
-                color: reference_line_color(ui.ctx()),
-            },
-        );
-    }
+    //     let (from, to) = {
+    //         if rect_from.center().x < rect_to.center().x {
+    //             // Left to right arrow
+    //             (
+    //                 adjust_y(rect_from.center_top().y, rect_from.right_center()),
+    //                 adjust_y(rect_to.center_top().y, rect_to.left_center()),
+    //             )
+    //         } else {
+    //             // Right to left arrow
+    //             (
+    //                 adjust_y(rect_from.center_top().y, rect_from.left_center()),
+    //                 adjust_y(rect_to.center_top().y, rect_to.right_center()),
+    //             )
+    //         }
+    //     };
+    //     arrow(
+    //         painter,
+    //         from,
+    //         to - from,
+    //         Stroke {
+    //             width: 1.0,
+    //             color: reference_line_color(ui.ctx()),
+    //         },
+    //     );
+    // }
 
     Ok(())
 }

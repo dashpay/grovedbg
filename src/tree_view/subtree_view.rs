@@ -286,8 +286,12 @@ impl<'pa> SubtreeView<'pa> {
             let visible_subtrees_width = subtree_data
                 .visible_keys
                 .iter()
-                .flat_map(|k| subtrees.get(&self.path.child(k.clone())))
-                .map(|e| e.width)
+                .map(|k| {
+                    subtrees
+                        .entry(self.path.child(k.clone()))
+                        .or_insert_with(|| SubtreeView::new(self.path.child(k.clone())))
+                        .width
+                })
                 .sum();
 
             let width: usize = std::cmp::max(visible_subtrees_width, 1);
@@ -297,8 +301,8 @@ impl<'pa> SubtreeView<'pa> {
             let mut current_x = bottom_pos.x - width_f / 2. - NODE_WIDTH / 2.;
             let y = bottom_pos.y + NODE_MARGIN_VERTICAL;
 
-            log::warn!("{}", subtree_data.visible_keys.len());
             for subtree_key in subtree_data.visible_keys.clone() {
+                log::warn!("{:?}, {}", subtree_key, visible_subtrees_width);
                 let path = self.path.child(subtree_key.clone());
 
                 let Some(mut subtree) = subtrees.remove(&path) else {
