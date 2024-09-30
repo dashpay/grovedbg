@@ -166,13 +166,15 @@ impl<'pa> SubtreeView<'pa> {
     ) {
         let mut element_view_ctx = subtree_view_ctx.element_view_context(self.path);
 
+        let visible_keys = &mut subtree_data.visible_keys;
+
         for (_, element) in subtree_data
             .elements
             .iter_mut()
             .skip(self.page_index * KV_PER_PAGE)
             .take(KV_PER_PAGE)
         {
-            element.draw(ui, &mut element_view_ctx);
+            element.draw(ui, &mut element_view_ctx, visible_keys);
 
             ui.separator();
         }
@@ -282,18 +284,10 @@ impl<'pa> SubtreeView<'pa> {
         {
             let subtree_data = tree_data.get(self.path);
             let visible_subtrees_width = subtree_data
-                .subtree_keys
+                .visible_keys
                 .iter()
-                .cloned()
-                .filter_map(|k| {
-                    let path = self.path.child(k.clone());
-                    path.visible().then(|| {
-                        subtrees
-                            .entry(path)
-                            .or_insert_with(|| SubtreeView::new(self.path.child(k.clone())))
-                            .width
-                    })
-                })
+                .flat_map(|k| subtrees.get(&self.path.child(k.clone())))
+                .map(|e| e.width)
                 .sum();
 
             let width: usize = std::cmp::max(visible_subtrees_width, 1);
@@ -303,10 +297,11 @@ impl<'pa> SubtreeView<'pa> {
             let mut current_x = bottom_pos.x - width_f / 2. - NODE_WIDTH / 2.;
             let y = bottom_pos.y + NODE_MARGIN_VERTICAL;
 
-            for subtree_key in subtree_data.subtree_keys.clone() {
+            log::warn!("{}", subtree_data.visible_keys.len());
+            for subtree_key in subtree_data.visible_keys.clone() {
                 let path = self.path.child(subtree_key.clone());
 
-                let Some(mut subtree) = path.visible().then(|| subtrees.remove(&path)).flatten() else {
+                let Some(mut subtree) = subtrees.remove(&path) else {
                     continue;
                 };
                 let subtree_width = width_to_egui(subtree.width);

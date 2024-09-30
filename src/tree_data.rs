@@ -23,6 +23,7 @@ pub(crate) struct SubtreeData {
     pub(crate) elements: SubtreeElements,
     pub(crate) root_key: Option<Key>,
     pub(crate) subtree_keys: BTreeSet<Key>,
+    pub(crate) visible_keys: BTreeSet<Key>,
 }
 
 impl SubtreeData {

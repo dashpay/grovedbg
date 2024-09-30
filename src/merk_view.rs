@@ -93,7 +93,7 @@ impl MerkView {
                     .show(area, |node_ui| {
                         node_ui.set_max_width(NODE_WIDTH);
 
-                        element_view.draw(node_ui, element_view_context);
+                        element_view.draw(node_ui, element_view_context, &mut subtree_data.visible_keys);
 
                         if let Some(proof_node) = subtree_proof_data.as_mut().and_then(|s| s.get_mut(&key)) {
                             node_ui.separator();
