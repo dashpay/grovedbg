@@ -19,7 +19,7 @@ use std::time::Duration;
 
 use bus::CommandBus;
 use eframe::{
-    egui::{self, Context, Style, Visuals},
+    egui::{self, Context, Theme},
     App, CreationContext, Storage,
 };
 use grovedbg_types::Key;
@@ -56,19 +56,8 @@ pub fn start_grovedbg_app(
         .and_then(|param| param.parse::<bool>().ok())
         .unwrap_or_default();
 
-    if dark_theme {
-        let style = Style {
-            visuals: Visuals::dark(),
-            ..Style::default()
-        };
-        cc.egui_ctx.set_style(style);
-    } else {
-        let style = Style {
-            visuals: Visuals::light(),
-            ..Style::default()
-        };
-        cc.egui_ctx.set_style(style);
-    }
+    cc.egui_ctx
+        .set_theme(if dark_theme { Theme::Dark } else { Theme::Light });
 
     let path_ctx = Box::leak(Box::new(PathCtx::new()));
 
@@ -480,7 +469,7 @@ impl App for GroveDbgApp {
             }
         });
 
-        self.dark_theme = ctx.style().visuals.dark_mode;
+        self.dark_theme = matches!(ctx.theme(), Theme::Dark);
         ctx.request_repaint_after(Duration::from_secs(1));
     }
 }
