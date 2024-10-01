@@ -251,7 +251,7 @@ impl QueryItemInput {
 
     fn draw(&mut self, ui: &mut egui::Ui) {
         CollapsingHeader::new("Query item type")
-            .id_source(self.subquery_idx * 1000 + self.item_idx)
+            .id_salt(self.subquery_idx * 1000 + self.item_idx)
             .show(ui, |collapsing| {
                 if collapsing
                     .add(RadioButton::new(

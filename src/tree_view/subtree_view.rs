@@ -302,7 +302,6 @@ impl<'pa> SubtreeView<'pa> {
             let y = bottom_pos.y + NODE_MARGIN_VERTICAL;
 
             for subtree_key in subtree_data.visible_keys.clone() {
-                log::warn!("{:?}, {}", subtree_key, visible_subtrees_width);
                 let path = self.path.child(subtree_key.clone());
 
                 let Some(mut subtree) = subtrees.remove(&path) else {

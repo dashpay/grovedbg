@@ -63,7 +63,7 @@ impl ProofLayerView {
                 }
             });
             CollapsingHeader::new("Layer proof")
-                .id_source(&key.bytes)
+                .id_salt(&key.bytes)
                 .show(ui, |collapsing| {
                     layer.draw(collapsing, bus, path.child(key.bytes.clone()));
                 });

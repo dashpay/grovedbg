@@ -366,10 +366,7 @@ impl App for GroveDbgApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("GroveDBG").show(ctx, |ui| {
             ui.horizontal(|line| {
-                egui::widgets::global_dark_light_mode_buttons(line);
-                // if line.button("Help").clicked() {
-                //     self.show_help = !self.show_help;
-                // }
+                egui::widgets::global_theme_preference_buttons(line);
 
                 if line
                     .button("New session")

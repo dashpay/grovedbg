@@ -112,9 +112,9 @@ pub(super) fn draw_reference(
     //     let painter = ui.painter();
 
     //     fn adjust_y(top_y: f32, mut side_center: Pos2) -> Pos2 {
-    //         side_center.y = cmp::min_by(side_center.y, top_y + REFERENCE_LINE_TOP_MARGIN, |a, b| {
-    //             a.partial_cmp(b).unwrap_or(cmp::Ordering::Equal)
-    //         });
+    //         side_center.y = cmp::min_by(side_center.y, top_y +
+    // REFERENCE_LINE_TOP_MARGIN, |a, b| {             
+    // a.partial_cmp(b).unwrap_or(cmp::Ordering::Equal)         });
     //         side_center
     //     }
 
