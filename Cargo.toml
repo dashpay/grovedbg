@@ -8,7 +8,7 @@ license = "MIT"
 repository = "https://github.com/dashpay/grovedbg"
 
 [dependencies]
-eframe = { version = "0.29.0", features = ["persistence"] }
+eframe = { version = "0.29.1", features = ["persistence"] }
 egui_logger = { git = "https://github.com/fominok/egui_logger", rev = "8024354acc26678b31d933c2cf7e94498989634f" }
 futures = "0.3.30"
 grovedbg-types = { path = "../grovedb/grovedbg-types", version = "2.0.3" }
