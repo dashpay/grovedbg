@@ -16,7 +16,7 @@ use crate::{
     path_ctx::{full_path_display, full_path_display_iter},
     protocol::FetchCommand,
     theme::element_to_color,
-    tree_data::{SubtreeData, SubtreeDataMap},
+    tree_data::SubtreeDataMap,
 };
 
 const ELEMENT_HEIGHT: f32 = 20.;
