@@ -1,4 +1,7 @@
-use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    collections::{btree_map::Entry, BTreeMap, BTreeSet},
+};
 
 use grovedbg_types::{Key, NodeUpdate};
 
@@ -10,12 +13,13 @@ use crate::{
 
 pub(crate) type SubtreeProofData = BTreeMap<Key, MerkProofNodeViewer>;
 pub(crate) type ProofData<'pa> = BTreeMap<Path<'pa>, SubtreeProofData>;
+pub(crate) type SubtreeDataMap<'pa> = BTreeMap<Path<'pa>, RefCell<SubtreeData>>;
 
 pub(crate) struct TreeData<'pa> {
     path_ctx: &'pa PathCtx,
-    data: BTreeMap<Path<'pa>, SubtreeData>,
-    proof_data: ProofData<'pa>,
-    merk_selected: Path<'pa>,
+    pub(crate) data: SubtreeDataMap<'pa>,
+    pub(crate) proof_data: ProofData<'pa>,
+    pub(crate) merk_selected: Path<'pa>,
 }
 
 #[derive(Default)]
@@ -42,38 +46,41 @@ impl<'pa> TreeData<'pa> {
         }
     }
 
-    pub(crate) fn get_merk_selected(
-        &mut self,
-    ) -> (Path<'pa>, &mut SubtreeData, Option<&mut SubtreeProofData>) {
-        if !self.data.contains_key(&self.merk_selected) {
-            self.get_create_missing_parents(self.merk_selected);
-        }
-
-        (
-            self.merk_selected,
-            self.data.get_mut(&self.merk_selected).unwrap(),
-            self.proof_data.get_mut(&self.merk_selected),
-        )
-    }
-
     pub(crate) fn select_for_merk(&mut self, path: Path<'pa>) {
         self.merk_selected = path;
     }
 
-    pub(crate) fn get(&mut self, path: Path<'pa>) -> &mut SubtreeData {
+    pub(crate) fn get_or_create_mut(&mut self, path: Path<'pa>) -> RefMut<SubtreeData> {
         // NLL issue
         if self.data.contains_key(&path) {
-            self.data.get_mut(&path).unwrap()
+            self.data.get(&path).unwrap().borrow_mut()
         } else {
-            self.get_create_missing_parents(path)
+            self.get_create_missing_parents(path).borrow_mut()
         }
     }
 
-    fn get_create_missing_parents(&mut self, path: Path<'pa>) -> &mut SubtreeData {
+    pub(crate) fn get_or_create(&mut self, path: Path<'pa>) -> Ref<SubtreeData> {
+        // NLL issue
+        if self.data.contains_key(&path) {
+            self.data.get(&path).unwrap().borrow()
+        } else {
+            self.get_create_missing_parents(path).borrow()
+        }
+    }
+
+    pub(crate) fn get_mut(&self, path: &Path<'pa>) -> Option<RefMut<SubtreeData>> {
+        self.data.get(path).map(RefCell::borrow_mut)
+    }
+
+    pub(crate) fn get(&self, path: &Path<'pa>) -> Option<Ref<SubtreeData>> {
+        self.data.get(path).map(RefCell::borrow)
+    }
+
+    fn get_create_missing_parents(&mut self, path: Path<'pa>) -> &RefCell<SubtreeData> {
         let mut current_path = path;
         while let Some((parent, key)) = current_path.parent_with_key() {
             let parent_value = self.data.entry(parent).or_default();
-            parent_value
+            RefCell::borrow_mut(parent_value)
                 .elements
                 .entry(key.clone())
                 .or_insert_with(|| ElementView::new_placeholder(key));
@@ -85,7 +92,7 @@ impl<'pa> TreeData<'pa> {
     }
 
     pub(crate) fn apply_root_node_update(&mut self, node_update: NodeUpdate) {
-        self.get(self.path_ctx.get_root()).root_key = Some(node_update.key.clone());
+        self.get_or_create_mut(self.path_ctx.get_root()).root_key = Some(node_update.key.clone());
         self.apply_node_update(node_update);
     }
 
@@ -110,11 +117,13 @@ impl<'pa> TreeData<'pa> {
         | grovedbg_types::Element::Sumtree { root_key, .. } = &element
         {
             let child_subtree_path = subtree_path.child(key.clone());
-            self.get(child_subtree_path).root_key = root_key.clone();
-            self.get(subtree_path).subtree_keys.insert(key.clone());
+            self.get_or_create_mut(child_subtree_path).root_key = root_key.clone();
+            self.get_or_create_mut(subtree_path)
+                .subtree_keys
+                .insert(key.clone());
         }
 
-        let subtree = self.get(subtree_path);
+        let mut subtree = self.get_or_create_mut(subtree_path);
 
         match subtree.elements.entry(key.clone()) {
             Entry::Vacant(e) => {

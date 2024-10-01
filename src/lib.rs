@@ -319,14 +319,15 @@ impl GroveDbgApp {
                     egui::Frame::default()
                         .outer_margin(PANEL_MARGIN)
                         .show(ui, |frame| {
-                            let (path, subtree_data, subtree_proof_data) = self.tree_data.get_merk_selected();
                             self.merk_view.draw(
                                 frame,
                                 &self.bus,
-                                path,
-                                subtree_data,
-                                subtree_proof_data,
-                                self.profiles_view.active_profile_root_ctx().fast_forward(path),
+                                self.tree_data.merk_selected,
+                                &mut self.tree_data.data,
+                                self.tree_data.proof_data.get_mut(&self.tree_data.merk_selected),
+                                self.profiles_view
+                                    .active_profile_root_ctx()
+                                    .fast_forward(self.tree_data.merk_selected),
                             );
                         });
                 } else {
@@ -468,7 +469,7 @@ impl App for GroveDbgApp {
             }
             bus::UserAction::DropFocus => self.focused_subtree = None,
             bus::UserAction::SelectMerkView(path) => {
-                let key = self.tree_data.get(path).root_key.as_ref().cloned();
+                let key = self.tree_data.get_or_create(path).root_key.as_ref().cloned();
                 if let Some(key) = key {
                     self.tree_data.select_for_merk(path);
                     self.bus.fetch_command(FetchCommand::FetchNode {

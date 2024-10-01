@@ -88,7 +88,7 @@ impl<'pa> TreeView<'pa> {
             path.for_segments(|segments_iter| {
                 let mut current_path = path.get_root();
                 for segment in segments_iter {
-                    let subtree_data = tree_data.get(current_path);
+                    let mut subtree_data = tree_data.get_or_create_mut(current_path);
                     subtree_data.visible_keys.insert(segment.bytes().to_vec());
                     current_path = current_path.child(segment.bytes().to_vec());
                 }

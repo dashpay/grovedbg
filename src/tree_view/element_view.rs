@@ -16,6 +16,7 @@ use crate::{
     path_ctx::{full_path_display, full_path_display_iter},
     protocol::FetchCommand,
     theme::element_to_color,
+    tree_data::{SubtreeData, SubtreeDataMap},
 };
 
 const ELEMENT_HEIGHT: f32 = 20.;
@@ -98,14 +99,16 @@ impl ElementView {
         }
     }
 
-    pub(crate) fn draw(
+    pub(crate) fn draw<'af, 'pa, 'pf, 'b>(
         &mut self,
         ui: &mut egui::Ui,
-        element_view_context: &mut ElementViewContext,
+        element_view_context: &mut ElementViewContext<'af, 'pa, 'pf, 'b>,
         visibility: &mut BTreeSet<Key>,
+        subtrees_map: &SubtreeDataMap<'pa>,
     ) {
         let ctx: Context = ui.ctx().clone();
-        let path_with_key = element_view_context.path().child(self.key.clone());
+        let path = element_view_context.path();
+        let path_with_key = path.child(self.key.clone());
 
         // Draw key
         ui.horizontal(|key_line| {
@@ -206,6 +209,7 @@ impl ElementView {
                             reference,
                             &mut self.show_reference_details,
                             &mut self.flags_display,
+                            subtrees_map,
                         )
                         .inspect_err(|e| {
                             let path_display = element_view_context.path().for_segments(|segments_iter| {
