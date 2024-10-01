@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, hash::DefaultHasher};
+use std::borrow::Borrow;
 
 use eframe::{
     egui::{self, CollapsingHeader, Frame, Label, Margin, TextEdit},
@@ -170,10 +170,11 @@ impl ProfileEntry {
                                 Label::new(format!("Show as: {}", self.display.as_ref())),
                             );
                         } else {
-                            // CollapsingHeader::new("Captured key display").id_salt()
-                            frame.collapsing("Captured key display", |collapsing| {
-                                self.display.draw(collapsing);
-                            });
+                            CollapsingHeader::new("Captured key display")
+                                .id_salt(parent_path)
+                                .show(frame, |collapsing| {
+                                    self.display.draw(collapsing);
+                                });
                         }
                     }
 
