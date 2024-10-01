@@ -19,7 +19,7 @@ use std::time::Duration;
 
 use bus::CommandBus;
 use eframe::{
-    egui::{self, Context, Style, Visuals},
+    egui::{self, Context, Theme},
     App, CreationContext, Storage,
 };
 use grovedbg_types::Key;
@@ -56,19 +56,8 @@ pub fn start_grovedbg_app(
         .and_then(|param| param.parse::<bool>().ok())
         .unwrap_or_default();
 
-    if dark_theme {
-        let style = Style {
-            visuals: Visuals::dark(),
-            ..Style::default()
-        };
-        cc.egui_ctx.set_style(style);
-    } else {
-        let style = Style {
-            visuals: Visuals::light(),
-            ..Style::default()
-        };
-        cc.egui_ctx.set_style(style);
-    }
+    cc.egui_ctx
+        .set_theme(if dark_theme { Theme::Dark } else { Theme::Light });
 
     let path_ctx = Box::leak(Box::new(PathCtx::new()));
 
@@ -319,14 +308,15 @@ impl GroveDbgApp {
                     egui::Frame::default()
                         .outer_margin(PANEL_MARGIN)
                         .show(ui, |frame| {
-                            let (path, subtree_data, subtree_proof_data) = self.tree_data.get_merk_selected();
                             self.merk_view.draw(
                                 frame,
                                 &self.bus,
-                                path,
-                                subtree_data,
-                                subtree_proof_data,
-                                self.profiles_view.active_profile_root_ctx().fast_forward(path),
+                                self.tree_data.merk_selected,
+                                &mut self.tree_data.data,
+                                self.tree_data.proof_data.get_mut(&self.tree_data.merk_selected),
+                                self.profiles_view
+                                    .active_profile_root_ctx()
+                                    .fast_forward(self.tree_data.merk_selected),
                             );
                         });
                 } else {
@@ -366,10 +356,7 @@ impl App for GroveDbgApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("GroveDBG").show(ctx, |ui| {
             ui.horizontal(|line| {
-                egui::widgets::global_dark_light_mode_buttons(line);
-                // if line.button("Help").clicked() {
-                //     self.show_help = !self.show_help;
-                // }
+                egui::widgets::global_theme_preference_buttons(line);
 
                 if line
                     .button("New session")
@@ -471,7 +458,7 @@ impl App for GroveDbgApp {
             }
             bus::UserAction::DropFocus => self.focused_subtree = None,
             bus::UserAction::SelectMerkView(path) => {
-                let key = self.tree_data.get(path).root_key.as_ref().cloned();
+                let key = self.tree_data.get_or_create(path).root_key.as_ref().cloned();
                 if let Some(key) = key {
                     self.tree_data.select_for_merk(path);
                     self.bus.fetch_command(FetchCommand::FetchNode {
@@ -482,7 +469,7 @@ impl App for GroveDbgApp {
             }
         });
 
-        self.dark_theme = ctx.style().visuals.dark_mode;
+        self.dark_theme = matches!(ctx.theme(), Theme::Dark);
         ctx.request_repaint_after(Duration::from_secs(1));
     }
 }

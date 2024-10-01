@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use eframe::{
     egui::{self, Button, Color32, Context, FontId, Id, Pos2, Rect, Stroke, Vec2},
     emath::TSTransform,
@@ -11,7 +13,7 @@ use crate::{
     profiles::ActiveProfileSubtreeContext,
     protocol::FetchCommand,
     theme::proof_node_color,
-    tree_data::{SubtreeData, SubtreeProofData},
+    tree_data::{SubtreeData, SubtreeDataMap, SubtreeProofData},
     tree_view::{ElementView, ElementViewContext, SubtreeElements, NODE_WIDTH},
 };
 
@@ -60,19 +62,23 @@ impl MerkView {
         }
     }
 
-    fn draw_node<'pd>(
+    fn draw_node<'af, 'pa, 'pf, 'b>(
         &mut self,
         ctx: &Context,
         rect: Rect,
         bus: &CommandBus,
         subtree_data: &mut SubtreeData,
+        subtrees_map: &SubtreeDataMap<'pa>,
         subtree_proof_data: &mut Option<&mut SubtreeProofData>,
         path: Path,
-        element_view_context: &mut ElementViewContext,
+        element_view_context: &mut ElementViewContext<'af, 'pa, 'pf, 'b>,
         key: Key,
         coords: Pos2,
     ) {
-        let Some(mut element_view) = subtree_data.elements.remove(&key) else {
+        let elements = &mut subtree_data.elements;
+        let visiblity = &mut subtree_data.visible_keys;
+
+        let Some(mut element_view) = elements.remove(&key) else {
             return;
         };
 
@@ -93,7 +99,7 @@ impl MerkView {
                     .show(area, |node_ui| {
                         node_ui.set_max_width(NODE_WIDTH);
 
-                        element_view.draw(node_ui, element_view_context);
+                        element_view.draw(node_ui, element_view_context, visiblity, &subtrees_map);
 
                         if let Some(proof_node) = subtree_proof_data.as_mut().and_then(|s| s.get_mut(&key)) {
                             node_ui.separator();
@@ -110,8 +116,7 @@ impl MerkView {
                                     .map(|p| p.contains_key(left))
                                     .unwrap_or_default()
                                 {
-                                    subtree_data
-                                        .elements
+                                    elements
                                         .entry(left.clone())
                                         .or_insert_with(|| ElementView::new_placeholder(left.clone()))
                                         .merk_visible = true;
@@ -122,8 +127,7 @@ impl MerkView {
                                     .clicked()
                                 {
                                     self.node_focus = Some(left.clone());
-                                    subtree_data
-                                        .elements
+                                    elements
                                         .entry(left.clone())
                                         .or_insert_with(|| ElementView::new_placeholder(left.clone()))
                                         .merk_visible = true;
@@ -144,8 +148,7 @@ impl MerkView {
                                     .map(|p| p.contains_key(right))
                                     .unwrap_or_default()
                                 {
-                                    subtree_data
-                                        .elements
+                                    elements
                                         .entry(right.clone())
                                         .or_insert_with(|| ElementView::new_placeholder(right.clone()))
                                         .merk_visible = true;
@@ -156,8 +159,7 @@ impl MerkView {
                                     .clicked()
                                 {
                                     self.node_focus = Some(right.clone());
-                                    subtree_data
-                                        .elements
+                                    elements
                                         .entry(right.clone())
                                         .or_insert_with(|| ElementView::new_placeholder(right.clone()))
                                         .merk_visible = true;
@@ -179,8 +181,7 @@ impl MerkView {
                 center_bottom.y += INNER_MARGIN;
 
                 if let Some(k) = element_view.left_child.as_ref().and_then(|c| {
-                    subtree_data
-                        .elements
+                    elements
                         .get(c)
                         .map(|e| e.merk_visible)
                         .unwrap_or_default()
@@ -212,8 +213,7 @@ impl MerkView {
                 }
 
                 if let Some(k) = element_view.right_child.as_ref().and_then(|c| {
-                    subtree_data
-                        .elements
+                    elements
                         .get(c)
                         .map(|e| e.merk_visible)
                         .unwrap_or_default()
@@ -255,10 +255,14 @@ impl MerkView {
         ui: &mut egui::Ui,
         bus: &CommandBus<'pa>,
         path: Path<'pa>,
-        subtree_data: &mut SubtreeData,
+        subtrees_map: &SubtreeDataMap<'pa>,
         mut subtree_proof_data: Option<&mut SubtreeProofData>,
         mut profile_ctx: ActiveProfileSubtreeContext,
     ) {
+        let Some(mut subtree_data) = subtrees_map.get(&path).map(RefCell::borrow_mut) else {
+            return;
+        };
+
         let Some(root_key) = subtree_data.root_key.clone() else {
             return;
         };
@@ -338,7 +342,8 @@ impl MerkView {
                 ui.ctx(),
                 rect,
                 bus,
-                subtree_data,
+                &mut subtree_data,
+                subtrees_map,
                 &mut subtree_proof_data,
                 path,
                 &mut element_view_context,

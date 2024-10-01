@@ -8,6 +8,7 @@ use crate::{
     bytes_utils::{binary_label, bytes_by_display_variant, BytesDisplayVariant},
     path_ctx::{path_label, Path},
     theme::reference_line_color,
+    tree_data::SubtreeDataMap,
     tree_view::ElementViewContext,
 };
 
@@ -20,6 +21,7 @@ pub(super) fn draw_reference(
     reference: &Reference,
     show_details: &mut bool,
     flags_display: &mut BytesDisplayVariant,
+    subtrees_map: &SubtreeDataMap,
 ) -> Result<(), ReferenceError> {
     let (referenced_path, referenced_key) =
         get_absolute_path_key(element_view_context.path(), key, reference)?;
@@ -97,7 +99,14 @@ pub(super) fn draw_reference(
 
     // Draw reference arrow
     if let Some((rect_from, rect_to)) = (!is_self_reference
-        && referenced_path.for_visible_mut(|v| *v).unwrap_or_default())
+        && referenced_path
+            .parent_with_key()
+            .and_then(|(referenced_path_parent, referenced_path_parent_key)| {
+                subtrees_map
+                    .get(&referenced_path_parent)
+                    .map(|s| s.borrow().visible_keys.contains(&referenced_path_parent_key))
+            })
+            .unwrap_or_default())
     .then(|| {
         ui.memory(|mem| {
             mem.area_rect(element_view_context.path().id())

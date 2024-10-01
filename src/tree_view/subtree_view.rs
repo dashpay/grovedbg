@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{cell::RefCell, collections::BTreeMap};
 
 use eframe::egui::{self, Align2, Color32, Pos2, Stroke};
 use grovedbg_types::{Key, PathQuery, Query, QueryItem, SizedQuery, SubqueryBranch};
@@ -9,7 +9,7 @@ use crate::{
     path_ctx::{path_label, Path},
     protocol::FetchCommand,
     theme::subtree_line_color,
-    tree_data::{SubtreeData, TreeData},
+    tree_data::{SubtreeData, SubtreeDataMap, TreeData},
 };
 
 const KV_PER_PAGE: usize = 10;
@@ -34,7 +34,10 @@ impl<'pa> SubtreeView<'pa> {
     }
 
     pub(super) fn scroll_to(&mut self, key: &[u8], tree_data: &mut TreeData<'pa>) {
-        let subtree_data = tree_data.get(self.path);
+        let Some(subtree_data) = tree_data.get(&self.path) else {
+            self.page_index = 0;
+            return;
+        };
         let index = subtree_data
             .elements
             .iter()
@@ -92,9 +95,11 @@ impl<'pa> SubtreeView<'pa> {
     }
 
     /// Draw subtree control buttons
-    fn draw_controls(&mut self, ui: &mut egui::Ui, bus: &CommandBus<'pa>, tree_data: &mut TreeData<'pa>) {
+    fn draw_controls(&mut self, ui: &mut egui::Ui, bus: &CommandBus<'pa>, tree_data: &TreeData<'pa>) {
         ui.horizontal(|controls_ui| {
-            let subtree_data = tree_data.get(self.path);
+            let Some(mut subtree_data) = tree_data.get_mut(&self.path) else {
+                return;
+            };
             let root_key = subtree_data.root_key.clone();
 
             if controls_ui.button("10").on_hover_text("Fetch 10 items").clicked() {
@@ -162,19 +167,25 @@ impl<'pa> SubtreeView<'pa> {
         &mut self,
         ui: &mut egui::Ui,
         subtree_view_ctx: &mut SubtreeViewContext<'pf, 'pa, 'cs>,
-        subtree_data: &mut SubtreeData,
+        subtrees_map: &SubtreeDataMap<'pa>,
     ) {
         let mut element_view_ctx = subtree_view_ctx.element_view_context(self.path);
 
-        for (_, element) in subtree_data
-            .elements
-            .iter_mut()
-            .skip(self.page_index * KV_PER_PAGE)
-            .take(KV_PER_PAGE)
-        {
-            element.draw(ui, &mut element_view_ctx);
+        if let Some(mut subtree_data) = subtrees_map.get(&self.path).map(RefCell::borrow_mut) {
+            let data: &mut SubtreeData = &mut subtree_data;
 
-            ui.separator();
+            let elements = &mut data.elements;
+            let visibility = &mut data.visible_keys;
+
+            for (_, element) in elements
+                .iter_mut()
+                .skip(self.page_index * KV_PER_PAGE)
+                .take(KV_PER_PAGE)
+            {
+                element.draw(ui, &mut element_view_ctx, visibility, subtrees_map);
+
+                ui.separator();
+            }
         }
     }
 
@@ -183,8 +194,11 @@ impl<'pa> SubtreeView<'pa> {
         &mut self,
         ui: &mut egui::Ui,
         ctx: &mut SubtreeViewContext,
-        subtree_data: &mut SubtreeData,
+        subtrees_map: &SubtreeDataMap<'pa>,
     ) {
+        let Some(subtree_data) = subtrees_map.get(&self.path).map(RefCell::borrow) else {
+            return;
+        };
         if subtree_data.elements.len() > KV_PER_PAGE {
             ui.horizontal(|pagination| {
                 if pagination
@@ -261,11 +275,9 @@ impl<'pa> SubtreeView<'pa> {
                         path_label(subtree_ui, self.path, &subtree_view_ctx.profile_ctx);
                         subtree_ui.separator();
 
-                        let subtree_data = tree_data.get(self.path);
+                        self.draw_elements(subtree_ui, &mut subtree_view_ctx, &tree_data.data);
 
-                        self.draw_elements(subtree_ui, &mut subtree_view_ctx, subtree_data);
-
-                        self.draw_pagination(subtree_ui, &mut subtree_view_ctx, subtree_data);
+                        self.draw_pagination(subtree_ui, &mut subtree_view_ctx, &tree_data.data);
 
                         if let Some(self_pos) = coords {
                             self.draw_parent_connection(subtree_ui, self_pos);
@@ -280,19 +292,15 @@ impl<'pa> SubtreeView<'pa> {
         if let Some(bottom_pos) =
             ui.memory(|mem| mem.area_rect(self.path.id()).map(|rect| rect.center_bottom()))
         {
-            let subtree_data = tree_data.get(self.path);
+            let subtree_data = tree_data.get_or_create(self.path);
             let visible_subtrees_width = subtree_data
-                .subtree_keys
+                .visible_keys
                 .iter()
-                .cloned()
-                .filter_map(|k| {
-                    let path = self.path.child(k.clone());
-                    path.visible().then(|| {
-                        subtrees
-                            .entry(path)
-                            .or_insert_with(|| SubtreeView::new(self.path.child(k.clone())))
-                            .width
-                    })
+                .map(|k| {
+                    subtrees
+                        .entry(self.path.child(k.clone()))
+                        .or_insert_with(|| SubtreeView::new(self.path.child(k.clone())))
+                        .width
                 })
                 .sum();
 
@@ -303,10 +311,13 @@ impl<'pa> SubtreeView<'pa> {
             let mut current_x = bottom_pos.x - width_f / 2. - NODE_WIDTH / 2.;
             let y = bottom_pos.y + NODE_MARGIN_VERTICAL;
 
-            for subtree_key in subtree_data.subtree_keys.clone() {
+            let visible_keys = subtree_data.visible_keys.clone();
+            drop(subtree_data);
+
+            for subtree_key in visible_keys {
                 let path = self.path.child(subtree_key.clone());
 
-                let Some(mut subtree) = path.visible().then(|| subtrees.remove(&path)).flatten() else {
+                let Some(mut subtree) = subtrees.remove(&path) else {
                     continue;
                 };
                 let subtree_width = width_to_egui(subtree.width);

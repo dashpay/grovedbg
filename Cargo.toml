@@ -8,31 +8,31 @@ license = "MIT"
 repository = "https://github.com/dashpay/grovedbg"
 
 [dependencies]
-eframe = { version = "0.28.1", features = ["persistence"] }
-egui_logger = { git = "https://github.com/fominok/egui_logger", rev = "a8e958506d1aa11b0da1e3b100453837e341e1d7" }
+eframe = { version = "0.29.1", features = ["persistence"] }
+egui_logger = { git = "https://github.com/fominok/egui_logger", rev = "8024354acc26678b31d933c2cf7e94498989634f" }
 futures = "0.3.30"
 grovedbg-types = { path = "../grovedb/grovedbg-types", version = "2.0.3" }
 hex = "0.4.3"
 integer-encoding = "4.0.2"
 log = "0.4.22"
-reqwest = { version = "0.12.7", features = ["json"] }
+reqwest = { version = "0.12.8", features = ["json"] }
 slab = "0.4.9"
 strum = { version = "0.26.3", features = ["strum_macros", "derive"] }
-egui-phosphor = "0.6.0"
-thiserror = "1.0.63"
-serde = { version = "1.0.208", features = ["derive"] }
+egui-phosphor = "0.7.1"
+thiserror = "1.0.64"
+serde = { version = "1.0.210", features = ["derive"] }
 serde_json = "1.0.128"
 reingold-tilford = "1.0.0"
-anyhow = "1.0.87"
+anyhow = "1.0.89"
 chrono = "0.4.38"
-dpp = { git = "https://github.com/dashpay/platform", version = "1.3.0", default-features = false, features = ["vote-serde-conversion"] }
-egui_json_tree = "0.6.0"
+dpp = { git = "https://github.com/dashpay/platform", version = "1.4.0-dev.2", default-features = false, features = ["vote-serde-conversion"] }
+egui_json_tree = { git = "https://github.com/bircni/egui_json_tree", rev = "a3f8d4954d11cb60a846f8bcbfe848648f28af93" }
 grovedb-epoch-based-storage-flags = "2.0.3"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { version = "1.39.3", default-features = false, features = ["sync", "rt-multi-thread", "macros"] }
+tokio = { version = "1.40.0", default-features = false, features = ["sync", "rt-multi-thread", "macros"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-tokio = { version = "1.39.3", default-features = false, features = ["sync", "macros"] }
-wasm-bindgen-futures = "0.4.42"
-web-sys = "0.3.69"
+tokio = { version = "1.40.0", default-features = false, features = ["sync", "macros"] }
+wasm-bindgen-futures = "0.4.43"
+web-sys = "0.3.70"
