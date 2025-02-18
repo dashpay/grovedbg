@@ -11,7 +11,7 @@ repository = "https://github.com/dashpay/grovedbg"
 eframe = { version = "0.29.1", features = ["persistence"] }
 egui_logger = { git = "https://github.com/fominok/egui_logger", rev = "8024354acc26678b31d933c2cf7e94498989634f" }
 futures = "0.3.30"
-grovedbg-types = { path = "../grovedb/grovedbg-types", version = "2.0.3" }
+grovedbg-types = { path = "../grovedb/grovedbg-types", version = "3.0.0" }
 hex = "0.4.3"
 integer-encoding = "4.0.2"
 log = "0.4.22"
@@ -25,7 +25,7 @@ serde_json = "1.0.128"
 reingold-tilford = "1.0.0"
 anyhow = "1.0.89"
 chrono = "0.4.38"
-dpp = { git = "https://github.com/dashpay/platform", version = "1.4.0-dev.2", default-features = false, features = ["vote-serde-conversion"] }
+dpp = { git = "https://github.com/dashpay/platform", branch = "v2.0-dev", default-features = false, features = ["vote-serde-conversion", "state-transitions"] }
 egui_json_tree = { git = "https://github.com/bircni/egui_json_tree", rev = "a3f8d4954d11cb60a846f8bcbfe848648f28af93" }
 grovedb-epoch-based-storage-flags = "2.0.3"
 

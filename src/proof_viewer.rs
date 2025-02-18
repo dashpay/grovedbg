@@ -270,8 +270,17 @@ impl MerkProofNodeViewer {
                     });
                     match ft {
                         grovedbg_types::TreeFeatureType::BasicMerkNode => ui.label("Basic merk node"),
-                        grovedbg_types::TreeFeatureType::SummedMerkNode(x) => {
-                            ui.label(format!("Summed merk node: {x}"))
+                        grovedbg_types::TreeFeatureType::SummedMerkNode(sum) => {
+                            ui.label(format!("Summed merk node: {sum}"))
+                        }
+                        grovedbg_types::TreeFeatureType::BigSummedMerkNode(sum) => {
+                            ui.label(format!("Big summed merk node: {sum}"))
+                        }
+                        grovedbg_types::TreeFeatureType::CountedMerkNode(count) => {
+                            ui.label(format!("Counted merk node: {count}"))
+                        }
+                        grovedbg_types::TreeFeatureType::CountedSummedMerkNode(count, sum) => {
+                            ui.label(format!("Counted/Summed merk node: count {count} sum {sum}"))
                         }
                     };
                 }
@@ -323,7 +332,7 @@ pub(crate) enum ElementViewer {
     },
     Sumtree {
         root_key: Option<BytesView>,
-        sum: i64,
+        sum: i128,
         element_flags: Option<BytesView>,
     },
     Item {
@@ -373,6 +382,16 @@ impl ElementViewer {
             grovedbg_types::Element::Subtree {
                 root_key,
                 element_flags,
+            }
+            | grovedbg_types::Element::CountTree {
+                root_key,
+                element_flags,
+                ..
+            }
+            | grovedbg_types::Element::CountSumTree {
+                root_key,
+                element_flags,
+                ..
             } => ElementViewer::Subtree {
                 root_key: root_key.map(|k| BytesView::new(k)),
                 element_flags: element_flags.map(|f| BytesView::new(f)),
@@ -383,76 +402,91 @@ impl ElementViewer {
                 element_flags,
             } => ElementViewer::Sumtree {
                 root_key: root_key.map(|k| BytesView::new(k)),
+                sum: sum as i128,
+                element_flags: element_flags.map(|f| BytesView::new(f)),
+            },
+            grovedbg_types::Element::BigSumTree {
+                root_key,
+                sum,
+                element_flags,
+            } => ElementViewer::Sumtree {
+                root_key: root_key.map(|k| BytesView::new(k)),
                 sum,
                 element_flags: element_flags.map(|f| BytesView::new(f)),
             },
-            grovedbg_types::Element::Item { value, element_flags } => ElementViewer::Item {
-                value: BytesView::new(value),
-                element_flags: element_flags.map(|f| BytesView::new(f)),
-            },
-            grovedbg_types::Element::SumItem { value, element_flags } => ElementViewer::SumItem {
-                value,
+            grovedbg_types::Element::Item { value, element_flags }
+            | grovedbg_types::Element::ItemWithBackwardReferences { value, element_flags } => {
+                ElementViewer::Item {
+                    value: BytesView::new(value),
+                    element_flags: element_flags.map(|f| BytesView::new(f)),
+                }
+            }
+            grovedbg_types::Element::SumItem { value, element_flags }
+            | grovedbg_types::Element::SumItemWithBackwardReferences { value, element_flags } => {
+                ElementViewer::SumItem {
+                    value,
+                    element_flags: element_flags.map(|f| BytesView::new(f)),
+                }
+            }
+            grovedbg_types::Element::Reference(reference)
+            | grovedbg_types::Element::BidirectionalReference(reference) => match reference {
+                grovedbg_types::Reference::AbsolutePathReference { path, element_flags } => {
+                    ElementViewer::AbsolutePathReference {
+                        path: path.into_iter().map(|s| BytesView::new(s)).collect(),
+                        element_flags: element_flags.map(|f| BytesView::new(f)),
+                    }
+                }
 
-                element_flags: element_flags.map(|f| BytesView::new(f)),
-            },
-            grovedbg_types::Element::Reference(grovedbg_types::Reference::AbsolutePathReference {
-                path,
-                element_flags,
-            }) => ElementViewer::AbsolutePathReference {
-                path: path.into_iter().map(|s| BytesView::new(s)).collect(),
-                element_flags: element_flags.map(|f| BytesView::new(f)),
-            },
-            grovedbg_types::Element::Reference(grovedbg_types::Reference::UpstreamRootHeightReference {
-                n_keep,
-                path_append,
-                element_flags,
-            }) => ElementViewer::UpstreamRootHeightReference {
-                n_keep,
-                path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
-                element_flags: element_flags.map(|f| BytesView::new(f)),
-            },
-            grovedbg_types::Element::Reference(
+                grovedbg_types::Reference::UpstreamRootHeightReference {
+                    n_keep,
+                    path_append,
+                    element_flags,
+                } => ElementViewer::UpstreamRootHeightReference {
+                    n_keep,
+                    path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
+                    element_flags: element_flags.map(|f| BytesView::new(f)),
+                },
+
                 grovedbg_types::Reference::UpstreamRootHeightWithParentPathAdditionReference {
                     n_keep,
                     path_append,
                     element_flags,
+                } => ElementViewer::UpstreamRootHeightWithParentPathAdditionReference {
+                    n_keep,
+                    path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
+                    element_flags: element_flags.map(|f| BytesView::new(f)),
                 },
-            ) => ElementViewer::UpstreamRootHeightWithParentPathAdditionReference {
-                n_keep,
-                path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
-                element_flags: element_flags.map(|f| BytesView::new(f)),
-            },
-            grovedbg_types::Element::Reference(
+
                 grovedbg_types::Reference::UpstreamFromElementHeightReference {
                     n_remove,
                     path_append,
                     element_flags,
+                } => ElementViewer::UpstreamFromElementHeightReference {
+                    n_remove,
+                    path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
+                    element_flags: element_flags.map(|f| BytesView::new(f)),
                 },
-            ) => ElementViewer::UpstreamFromElementHeightReference {
-                n_remove,
-                path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
-                element_flags: element_flags.map(|f| BytesView::new(f)),
-            },
-            grovedbg_types::Element::Reference(grovedbg_types::Reference::CousinReference {
-                swap_parent,
-                element_flags,
-            }) => ElementViewer::CousinReference {
-                swap_parent: BytesView::new(swap_parent),
-                element_flags: element_flags.map(|f| BytesView::new(f)),
-            },
-            grovedbg_types::Element::Reference(grovedbg_types::Reference::RemovedCousinReference {
-                swap_parent,
-                element_flags,
-            }) => ElementViewer::RemovedCousinReference {
-                swap_parent: swap_parent.into_iter().map(|s| BytesView::new(s)).collect(),
-                element_flags: element_flags.map(|f| BytesView::new(f)),
-            },
-            grovedbg_types::Element::Reference(grovedbg_types::Reference::SiblingReference {
-                sibling_key,
-                element_flags,
-            }) => ElementViewer::SiblingReference {
-                sibling_key: BytesView::new(sibling_key),
-                element_flags: element_flags.map(|f| BytesView::new(f)),
+                grovedbg_types::Reference::CousinReference {
+                    swap_parent,
+                    element_flags,
+                } => ElementViewer::CousinReference {
+                    swap_parent: BytesView::new(swap_parent),
+                    element_flags: element_flags.map(|f| BytesView::new(f)),
+                },
+                grovedbg_types::Reference::RemovedCousinReference {
+                    swap_parent,
+                    element_flags,
+                } => ElementViewer::RemovedCousinReference {
+                    swap_parent: swap_parent.into_iter().map(|s| BytesView::new(s)).collect(),
+                    element_flags: element_flags.map(|f| BytesView::new(f)),
+                },
+                grovedbg_types::Reference::SiblingReference {
+                    sibling_key,
+                    element_flags,
+                } => ElementViewer::SiblingReference {
+                    sibling_key: BytesView::new(sibling_key),
+                    element_flags: element_flags.map(|f| BytesView::new(f)),
+                },
             },
         }
     }

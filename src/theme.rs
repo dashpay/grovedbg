@@ -20,21 +20,41 @@ pub(crate) fn element_to_color(ctx: &Context, element: &ElementOrPlaceholder) ->
         // Dark theme
         match element {
             ElementOrPlaceholder::Placeholder => Color32::RED,
-            ElementOrPlaceholder::Element(Element::Item { .. }) => Color32::GRAY,
-            ElementOrPlaceholder::Element(Element::SumItem { .. }) => Color32::DARK_GREEN,
+            ElementOrPlaceholder::Element(
+                Element::Item { .. } | Element::ItemWithBackwardReferences { .. },
+            ) => Color32::GRAY,
+            ElementOrPlaceholder::Element(
+                Element::SumItem { .. } | Element::SumItemWithBackwardReferences { .. },
+            ) => Color32::DARK_GREEN,
             ElementOrPlaceholder::Element(Element::Subtree { .. }) => SUBTREE_COLOR_DARK,
-            ElementOrPlaceholder::Element(Element::Sumtree { .. }) => Color32::GREEN,
+            ElementOrPlaceholder::Element(
+                Element::Sumtree { .. }
+                | Element::BigSumTree { .. }
+                | Element::CountTree { .. }
+                | Element::CountSumTree { .. },
+            ) => Color32::GREEN,
             ElementOrPlaceholder::Element(Element::Reference(..)) => REFERENCE_COLOR_DARK,
+            ElementOrPlaceholder::Element(Element::BidirectionalReference(..)) => REFERENCE_COLOR_DARK,
         }
     } else {
         // Light theme
         match element {
             ElementOrPlaceholder::Placeholder => Color32::DARK_RED,
-            ElementOrPlaceholder::Element(Element::Item { .. }) => Color32::GRAY,
-            ElementOrPlaceholder::Element(Element::SumItem { .. }) => Color32::DARK_GREEN,
+            ElementOrPlaceholder::Element(
+                Element::Item { .. } | Element::ItemWithBackwardReferences { .. },
+            ) => Color32::GRAY,
+            ElementOrPlaceholder::Element(
+                Element::SumItem { .. } | Element::SumItemWithBackwardReferences { .. },
+            ) => Color32::DARK_GREEN,
             ElementOrPlaceholder::Element(Element::Subtree { .. }) => SUBTREE_COLOR_LIGHT,
-            ElementOrPlaceholder::Element(Element::Sumtree { .. }) => Color32::from_rgb(0, 150, 0),
+            ElementOrPlaceholder::Element(
+                Element::Sumtree { .. }
+                | Element::BigSumTree { .. }
+                | Element::CountTree { .. }
+                | Element::CountSumTree { .. },
+            ) => Color32::from_rgb(0, 150, 0),
             ElementOrPlaceholder::Element(Element::Reference(..)) => REFERENCE_COLOR_LIGHT,
+            ElementOrPlaceholder::Element(Element::BidirectionalReference(..)) => REFERENCE_COLOR_LIGHT,
         }
     }
 }

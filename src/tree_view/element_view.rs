@@ -160,7 +160,11 @@ impl ElementView {
             layout,
             |value_ui: &mut egui::Ui| {
                 match &self.value {
-                    ElementOrPlaceholder::Element(Element::Item { value, element_flags }) => {
+                    // TODO items with backward references shall have some hints
+                    ElementOrPlaceholder::Element(
+                        Element::Item { value, element_flags }
+                        | Element::ItemWithBackwardReferences { value, element_flags },
+                    ) => {
                         let mut profile_display = element_view_context.profile_ctx().value_display(&self.key);
 
                         let display = profile_display.as_mut().unwrap_or(&mut self.value_display);
@@ -186,7 +190,10 @@ impl ElementView {
                             });
                         }
                     }
-                    ElementOrPlaceholder::Element(Element::SumItem { value, element_flags }) => {
+                    ElementOrPlaceholder::Element(
+                        Element::SumItem { value, element_flags }
+                        | Element::SumItemWithBackwardReferences { value, element_flags },
+                    ) => {
                         value_ui.label(format!("Value: {value}"));
 
                         if let Some(flags) = element_flags {
@@ -201,7 +208,9 @@ impl ElementView {
                             });
                         }
                     }
-                    ElementOrPlaceholder::Element(Element::Reference(reference)) => {
+                    ElementOrPlaceholder::Element(
+                        Element::Reference(reference) | Element::BidirectionalReference(reference),
+                    ) => {
                         draw_reference(
                             value_ui,
                             element_view_context,
@@ -269,6 +278,18 @@ impl ElementView {
                             });
                         }
                     }
+                    ElementOrPlaceholder::Element(Element::BigSumTree {
+                        sum, element_flags, ..
+                    }) => {}
+                    ElementOrPlaceholder::Element(Element::CountTree {
+                        count, element_flags, ..
+                    }) => {}
+                    ElementOrPlaceholder::Element(Element::CountSumTree {
+                        count,
+                        sum,
+                        element_flags,
+                        ..
+                    }) => {}
                     ElementOrPlaceholder::Element(Element::Subtree { element_flags, .. }) => {
                         value_ui.horizontal(|line| {
                             let mut checkbox = visibility.contains(&self.key);
