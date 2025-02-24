@@ -405,3 +405,9 @@ Display** dropdown.
 Profile entries are recursive, allowing you to match child subtrees of already matched elements, and continue further
 down the hierarchy. This enables you to create a path to a specific subtree using **Key** entries, or apply changes to
 multiple nested subtrees more broadly by using **Capture** when appropriate.
+
+## Building for web
+
+```
+RUSTFLAGS='--cfg=web_sys_unstable_apis' cargo watch -- trunk build --release
+```
