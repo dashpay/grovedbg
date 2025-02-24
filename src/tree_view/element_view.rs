@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use eframe::egui::{self, Context, Label, Layout, RichText, Vec2};
 use grovedb_epoch_based_storage_flags::StorageFlags;
 use grovedbg_types::{CryptoHash, Element, Key};
-use reference_view::draw_reference;
+use reference_view::{draw_bidi_reference, draw_reference};
 
 use super::{ElementViewContext, NODE_WIDTH};
 use crate::{
@@ -208,14 +208,16 @@ impl ElementView {
                             });
                         }
                     }
-                    ElementOrPlaceholder::Element(
-                        Element::Reference(reference) | Element::BidirectionalReference(reference),
-                    ) => {
+                    ElementOrPlaceholder::Element(Element::Reference {
+                        reference_path,
+                        element_flags,
+                    }) => {
                         draw_reference(
                             value_ui,
                             element_view_context,
                             &self.key,
-                            reference,
+                            reference_path,
+                            element_flags.as_deref(),
                             &mut self.show_reference_details,
                             &mut self.flags_display,
                             subtrees_map,
@@ -242,6 +244,48 @@ impl ElementView {
                         })
                         .unwrap_or_else(|_| {
                             value_ui.label("Bad reference");
+                        });
+                    }
+                    ElementOrPlaceholder::Element(Element::BidirectionalReference {
+                        reference_path,
+                        element_flags,
+                        slot_idx,
+                        cascade_on_update,
+                    }) => {
+                        draw_bidi_reference(
+                            value_ui,
+                            element_view_context,
+                            &self.key,
+                            reference_path,
+                            *slot_idx,
+                            *cascade_on_update,
+                            element_flags.as_deref(),
+                            &mut self.show_reference_details,
+                            &mut self.flags_display,
+                            subtrees_map,
+                        )
+                        .inspect_err(|e| {
+                            let path_display = element_view_context.path().for_segments(|segments_iter| {
+                                full_path_display(full_path_display_iter(
+                                    segments_iter,
+                                    element_view_context.profile_ctx(),
+                                ))
+                            });
+
+                            log::warn!(
+                                "Bad bidirectional reference at {} under the key {}, {}",
+                                path_display,
+                                bytes_by_display_variant(
+                                    &self.key,
+                                    &path_with_key
+                                        .get_display_variant()
+                                        .unwrap_or_else(|| BytesDisplayVariant::guess(&self.key)),
+                                ),
+                                e.0,
+                            );
+                        })
+                        .unwrap_or_else(|_| {
+                            value_ui.label("Bad bidirectional reference");
                         });
                     }
                     ElementOrPlaceholder::Element(Element::Sumtree {
@@ -280,16 +324,109 @@ impl ElementView {
                     }
                     ElementOrPlaceholder::Element(Element::BigSumTree {
                         sum, element_flags, ..
-                    }) => {}
+                    }) => {
+                        value_ui.horizontal(|line| {
+                            let mut checkbox = visibility.contains(&self.key);
+                            let checkbox_before = checkbox;
+
+                            line.checkbox(&mut checkbox, "");
+
+                            if checkbox_before != checkbox {
+                                if checkbox {
+                                    visibility.insert(self.key.clone());
+                                } else {
+                                    visibility.remove(&self.key);
+                                }
+                            }
+
+                            if line.button(egui_phosphor::regular::MAGNIFYING_GLASS).clicked() {
+                                element_view_context.focus_child_subtree(self.key.clone());
+                            }
+                            line.label(format!("Big sum: {sum}"));
+                        });
+                        if let Some(flags) = element_flags {
+                            value_ui.horizontal(|line| {
+                                line.label("Flags:");
+                                if let Some(storage_flags) = StorageFlags::deserialize(&flags).ok().flatten()
+                                {
+                                    line.label(format!("{storage_flags}"));
+                                } else {
+                                    binary_label(line, flags, &mut self.flags_display);
+                                }
+                            });
+                        }
+                    }
                     ElementOrPlaceholder::Element(Element::CountTree {
                         count, element_flags, ..
-                    }) => {}
+                    }) => {
+                        value_ui.horizontal(|line| {
+                            let mut checkbox = visibility.contains(&self.key);
+                            let checkbox_before = checkbox;
+
+                            line.checkbox(&mut checkbox, "");
+
+                            if checkbox_before != checkbox {
+                                if checkbox {
+                                    visibility.insert(self.key.clone());
+                                } else {
+                                    visibility.remove(&self.key);
+                                }
+                            }
+
+                            if line.button(egui_phosphor::regular::MAGNIFYING_GLASS).clicked() {
+                                element_view_context.focus_child_subtree(self.key.clone());
+                            }
+                            line.label(format!("Count: {count}"));
+                        });
+                        if let Some(flags) = element_flags {
+                            value_ui.horizontal(|line| {
+                                line.label("Flags:");
+                                if let Some(storage_flags) = StorageFlags::deserialize(&flags).ok().flatten()
+                                {
+                                    line.label(format!("{storage_flags}"));
+                                } else {
+                                    binary_label(line, flags, &mut self.flags_display);
+                                }
+                            });
+                        }
+                    }
                     ElementOrPlaceholder::Element(Element::CountSumTree {
                         count,
                         sum,
                         element_flags,
                         ..
-                    }) => {}
+                    }) => {
+                        value_ui.horizontal(|line| {
+                            let mut checkbox = visibility.contains(&self.key);
+                            let checkbox_before = checkbox;
+
+                            line.checkbox(&mut checkbox, "");
+
+                            if checkbox_before != checkbox {
+                                if checkbox {
+                                    visibility.insert(self.key.clone());
+                                } else {
+                                    visibility.remove(&self.key);
+                                }
+                            }
+
+                            if line.button(egui_phosphor::regular::MAGNIFYING_GLASS).clicked() {
+                                element_view_context.focus_child_subtree(self.key.clone());
+                            }
+                            line.label(format!("Count: {count}, Sum: {sum}"));
+                        });
+                        if let Some(flags) = element_flags {
+                            value_ui.horizontal(|line| {
+                                line.label("Flags:");
+                                if let Some(storage_flags) = StorageFlags::deserialize(&flags).ok().flatten()
+                                {
+                                    line.label(format!("{storage_flags}"));
+                                } else {
+                                    binary_label(line, flags, &mut self.flags_display);
+                                }
+                            });
+                        }
+                    }
                     ElementOrPlaceholder::Element(Element::Subtree { element_flags, .. }) => {
                         value_ui.horizontal(|line| {
                             let mut checkbox = visibility.contains(&self.key);

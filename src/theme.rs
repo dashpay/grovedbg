@@ -12,6 +12,11 @@ const ERROR_COLOR_LIGHT: Color32 = Color32::DARK_RED;
 const REFERENCE_COLOR_LIGHT: Color32 = Color32::DARK_BLUE;
 const REFERENCE_COLOR_DARK: Color32 = Color32::LIGHT_BLUE;
 
+const BIDI_REFERENCE_COLOR_LIGHT: Color32 = Color32::from_rgb(0, 0x9E, 0x9E);
+const BIDI_REFERENCE_COLOR_DARK: Color32 = Color32::from_rgb(0, 0x9E, 0x9E);
+// const BIDI_REFERENCE_COLOR_DARK: Color32 = Color32::from_rgb(0xAD, 0xD8,
+// 0xE6);
+
 const PROOF_NODE_COLOR_LIGHT: Color32 = Color32::from_rgb(143, 0, 179);
 const PROOF_NODE_COLOR_DARK: Color32 = Color32::from_rgb(215, 119, 240);
 
@@ -33,8 +38,10 @@ pub(crate) fn element_to_color(ctx: &Context, element: &ElementOrPlaceholder) ->
                 | Element::CountTree { .. }
                 | Element::CountSumTree { .. },
             ) => Color32::GREEN,
-            ElementOrPlaceholder::Element(Element::Reference(..)) => REFERENCE_COLOR_DARK,
-            ElementOrPlaceholder::Element(Element::BidirectionalReference(..)) => REFERENCE_COLOR_DARK,
+            ElementOrPlaceholder::Element(Element::Reference { .. }) => REFERENCE_COLOR_DARK,
+            ElementOrPlaceholder::Element(Element::BidirectionalReference { .. }) => {
+                BIDI_REFERENCE_COLOR_DARK
+            }
         }
     } else {
         // Light theme
@@ -53,8 +60,10 @@ pub(crate) fn element_to_color(ctx: &Context, element: &ElementOrPlaceholder) ->
                 | Element::CountTree { .. }
                 | Element::CountSumTree { .. },
             ) => Color32::from_rgb(0, 150, 0),
-            ElementOrPlaceholder::Element(Element::Reference(..)) => REFERENCE_COLOR_LIGHT,
-            ElementOrPlaceholder::Element(Element::BidirectionalReference(..)) => REFERENCE_COLOR_LIGHT,
+            ElementOrPlaceholder::Element(Element::Reference { .. }) => REFERENCE_COLOR_LIGHT,
+            ElementOrPlaceholder::Element(Element::BidirectionalReference { .. }) => {
+                BIDI_REFERENCE_COLOR_LIGHT
+            }
         }
     }
 }
@@ -72,6 +81,14 @@ pub(crate) fn reference_line_color(ctx: &Context) -> Color32 {
         REFERENCE_COLOR_DARK
     } else {
         REFERENCE_COLOR_LIGHT
+    }
+}
+
+pub(crate) fn bidi_reference_line_color(ctx: &Context) -> Color32 {
+    if ctx.style().visuals.dark_mode {
+        BIDI_REFERENCE_COLOR_DARK
+    } else {
+        BIDI_REFERENCE_COLOR_LIGHT
     }
 }
 

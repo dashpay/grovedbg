@@ -325,6 +325,152 @@ impl ProveOptionsView {
     }
 }
 
+pub(crate) enum ReferencePath {
+    AbsolutePathReference {
+        path: Vec<BytesView>,
+    },
+    UpstreamRootHeightReference {
+        n_keep: u32,
+        path_append: Vec<BytesView>,
+    },
+    UpstreamRootHeightWithParentPathAdditionReference {
+        n_keep: u32,
+        path_append: Vec<BytesView>,
+    },
+    UpstreamFromElementHeightReference {
+        n_remove: u32,
+        path_append: Vec<BytesView>,
+    },
+    CousinReference {
+        swap_parent: BytesView,
+    },
+    RemovedCousinReference {
+        swap_parent: Vec<BytesView>,
+    },
+    SiblingReference {
+        sibling_key: BytesView,
+    },
+}
+
+impl From<grovedbg_types::ReferencePath> for ReferencePath {
+    fn from(value: grovedbg_types::ReferencePath) -> Self {
+        match value {
+            grovedbg_types::ReferencePath::AbsolutePathReference { path, .. } => {
+                Self::AbsolutePathReference {
+                    path: path.into_iter().map(|s| BytesView::new(s)).collect(),
+                }
+            }
+
+            grovedbg_types::ReferencePath::UpstreamRootHeightReference {
+                n_keep, path_append, ..
+            } => Self::UpstreamRootHeightReference {
+                n_keep,
+                path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
+            },
+
+            grovedbg_types::ReferencePath::UpstreamRootHeightWithParentPathAdditionReference {
+                n_keep,
+                path_append,
+                ..
+            } => Self::UpstreamRootHeightWithParentPathAdditionReference {
+                n_keep,
+                path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
+            },
+
+            grovedbg_types::ReferencePath::UpstreamFromElementHeightReference {
+                n_remove,
+                path_append,
+                ..
+            } => Self::UpstreamFromElementHeightReference {
+                n_remove,
+                path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
+            },
+            grovedbg_types::ReferencePath::CousinReference { swap_parent, .. } => Self::CousinReference {
+                swap_parent: BytesView::new(swap_parent),
+            },
+            grovedbg_types::ReferencePath::RemovedCousinReference { swap_parent, .. } => {
+                Self::RemovedCousinReference {
+                    swap_parent: swap_parent.into_iter().map(|s| BytesView::new(s)).collect(),
+                }
+            }
+            grovedbg_types::ReferencePath::SiblingReference { sibling_key, .. } => Self::SiblingReference {
+                sibling_key: BytesView::new(sibling_key),
+            },
+        }
+    }
+}
+
+impl ReferencePath {
+    fn draw(&mut self, ui: &mut egui::Ui) {
+        match self {
+            ReferencePath::AbsolutePathReference { path, .. } => {
+                ui.label("Absolute path reference");
+                for (i, segment) in path.iter_mut().enumerate() {
+                    ui.horizontal(|line| {
+                        line.label(i.to_string());
+                        segment.draw(line);
+                    });
+                }
+            }
+            ReferencePath::UpstreamRootHeightReference {
+                n_keep, path_append, ..
+            } => {
+                ui.label("Upstream root height reference");
+                ui.label(format!("N keep: {n_keep}"));
+                for (i, segment) in path_append.iter_mut().enumerate() {
+                    ui.horizontal(|line| {
+                        line.label(i.to_string());
+                        segment.draw(line);
+                    });
+                }
+            }
+            ReferencePath::UpstreamRootHeightWithParentPathAdditionReference {
+                n_keep, path_append, ..
+            } => {
+                ui.label("Upstream root height with parent path addition reference");
+                ui.label(format!("N keep: {n_keep}"));
+                for (i, segment) in path_append.iter_mut().enumerate() {
+                    ui.horizontal(|line| {
+                        line.label(i.to_string());
+                        segment.draw(line);
+                    });
+                }
+            }
+            ReferencePath::UpstreamFromElementHeightReference {
+                n_remove,
+                path_append,
+                ..
+            } => {
+                ui.label("Upstream from element height reference ");
+                ui.label(format!("N remove: {n_remove}"));
+                for (i, segment) in path_append.iter_mut().enumerate() {
+                    ui.horizontal(|line| {
+                        line.label(i.to_string());
+                        segment.draw(line);
+                    });
+                }
+            }
+            ReferencePath::CousinReference { swap_parent, .. } => {
+                ui.label("Cousin reference");
+                swap_parent.draw(ui);
+            }
+            ReferencePath::RemovedCousinReference { swap_parent, .. } => {
+                ui.label("Removed cousin reference");
+                for (i, segment) in swap_parent.iter_mut().enumerate() {
+                    ui.horizontal(|line| {
+                        line.label(i.to_string());
+                        segment.draw(line);
+                    });
+                }
+            }
+            ReferencePath::SiblingReference { sibling_key, .. } => {
+                ui.label("Sibling reference");
+                sibling_key.draw(ui);
+            }
+        }
+    }
+}
+
 pub(crate) enum ElementViewer {
     Subtree {
         root_key: Option<BytesView>,
@@ -332,10 +478,30 @@ pub(crate) enum ElementViewer {
     },
     Sumtree {
         root_key: Option<BytesView>,
+        sum: i64,
+        element_flags: Option<BytesView>,
+    },
+    BigSumtree {
+        root_key: Option<BytesView>,
         sum: i128,
         element_flags: Option<BytesView>,
     },
+    CountTree {
+        root_key: Option<BytesView>,
+        count: u64,
+        element_flags: Option<BytesView>,
+    },
+    CountSumTree {
+        root_key: Option<BytesView>,
+        count: u64,
+        sum: i64,
+        element_flags: Option<BytesView>,
+    },
     Item {
+        value: BytesView,
+        element_flags: Option<BytesView>,
+    },
+    ItemWithBackwardReferences {
         value: BytesView,
         element_flags: Option<BytesView>,
     },
@@ -343,36 +509,19 @@ pub(crate) enum ElementViewer {
         value: i64,
         element_flags: Option<BytesView>,
     },
-    AbsolutePathReference {
-        path: Vec<BytesView>,
+    SumItemWithBackwardReferences {
+        value: i64,
         element_flags: Option<BytesView>,
     },
-    UpstreamRootHeightReference {
-        n_keep: u32,
-        path_append: Vec<BytesView>,
+    Reference {
+        reference_path: ReferencePath,
         element_flags: Option<BytesView>,
     },
-    UpstreamRootHeightWithParentPathAdditionReference {
-        n_keep: u32,
-        path_append: Vec<BytesView>,
+    BidirectionalReference {
+        reference_path: ReferencePath,
         element_flags: Option<BytesView>,
-    },
-    UpstreamFromElementHeightReference {
-        n_remove: u32,
-        path_append: Vec<BytesView>,
-        element_flags: Option<BytesView>,
-    },
-    CousinReference {
-        swap_parent: BytesView,
-        element_flags: Option<BytesView>,
-    },
-    RemovedCousinReference {
-        swap_parent: Vec<BytesView>,
-        element_flags: Option<BytesView>,
-    },
-    SiblingReference {
-        sibling_key: BytesView,
-        element_flags: Option<BytesView>,
+        cascade_on_update: bool,
+        slot_idx: u8,
     },
 }
 
@@ -382,18 +531,30 @@ impl ElementViewer {
             grovedbg_types::Element::Subtree {
                 root_key,
                 element_flags,
-            }
-            | grovedbg_types::Element::CountTree {
-                root_key,
-                element_flags,
-                ..
-            }
-            | grovedbg_types::Element::CountSumTree {
-                root_key,
-                element_flags,
-                ..
             } => ElementViewer::Subtree {
                 root_key: root_key.map(|k| BytesView::new(k)),
+                element_flags: element_flags.map(|f| BytesView::new(f)),
+            },
+            grovedbg_types::Element::CountTree {
+                root_key,
+                count,
+                element_flags,
+                ..
+            } => ElementViewer::CountTree {
+                root_key: root_key.map(|k| BytesView::new(k)),
+                count,
+                element_flags: element_flags.map(|f| BytesView::new(f)),
+            },
+            grovedbg_types::Element::CountSumTree {
+                root_key,
+                count,
+                sum,
+                element_flags,
+                ..
+            } => ElementViewer::CountSumTree {
+                root_key: root_key.map(|k| BytesView::new(k)),
+                count,
+                sum,
                 element_flags: element_flags.map(|f| BytesView::new(f)),
             },
             grovedbg_types::Element::Sumtree {
@@ -402,91 +563,55 @@ impl ElementViewer {
                 element_flags,
             } => ElementViewer::Sumtree {
                 root_key: root_key.map(|k| BytesView::new(k)),
-                sum: sum as i128,
+                sum,
                 element_flags: element_flags.map(|f| BytesView::new(f)),
             },
             grovedbg_types::Element::BigSumTree {
                 root_key,
                 sum,
                 element_flags,
-            } => ElementViewer::Sumtree {
+            } => ElementViewer::BigSumtree {
                 root_key: root_key.map(|k| BytesView::new(k)),
                 sum,
                 element_flags: element_flags.map(|f| BytesView::new(f)),
             },
-            grovedbg_types::Element::Item { value, element_flags }
-            | grovedbg_types::Element::ItemWithBackwardReferences { value, element_flags } => {
-                ElementViewer::Item {
+            grovedbg_types::Element::Item { value, element_flags } => ElementViewer::Item {
+                value: BytesView::new(value),
+                element_flags: element_flags.map(|f| BytesView::new(f)),
+            },
+            grovedbg_types::Element::ItemWithBackwardReferences { value, element_flags } => {
+                ElementViewer::ItemWithBackwardReferences {
                     value: BytesView::new(value),
                     element_flags: element_flags.map(|f| BytesView::new(f)),
                 }
             }
-            grovedbg_types::Element::SumItem { value, element_flags }
-            | grovedbg_types::Element::SumItemWithBackwardReferences { value, element_flags } => {
-                ElementViewer::SumItem {
+            grovedbg_types::Element::SumItem { value, element_flags } => ElementViewer::SumItem {
+                value,
+                element_flags: element_flags.map(|f| BytesView::new(f)),
+            },
+            grovedbg_types::Element::SumItemWithBackwardReferences { value, element_flags } => {
+                ElementViewer::SumItemWithBackwardReferences {
                     value,
                     element_flags: element_flags.map(|f| BytesView::new(f)),
                 }
             }
-            grovedbg_types::Element::Reference(reference)
-            | grovedbg_types::Element::BidirectionalReference(reference) => match reference {
-                grovedbg_types::Reference::AbsolutePathReference { path, element_flags } => {
-                    ElementViewer::AbsolutePathReference {
-                        path: path.into_iter().map(|s| BytesView::new(s)).collect(),
-                        element_flags: element_flags.map(|f| BytesView::new(f)),
-                    }
-                }
-
-                grovedbg_types::Reference::UpstreamRootHeightReference {
-                    n_keep,
-                    path_append,
-                    element_flags,
-                } => ElementViewer::UpstreamRootHeightReference {
-                    n_keep,
-                    path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
-                    element_flags: element_flags.map(|f| BytesView::new(f)),
-                },
-
-                grovedbg_types::Reference::UpstreamRootHeightWithParentPathAdditionReference {
-                    n_keep,
-                    path_append,
-                    element_flags,
-                } => ElementViewer::UpstreamRootHeightWithParentPathAdditionReference {
-                    n_keep,
-                    path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
-                    element_flags: element_flags.map(|f| BytesView::new(f)),
-                },
-
-                grovedbg_types::Reference::UpstreamFromElementHeightReference {
-                    n_remove,
-                    path_append,
-                    element_flags,
-                } => ElementViewer::UpstreamFromElementHeightReference {
-                    n_remove,
-                    path_append: path_append.into_iter().map(|s| BytesView::new(s)).collect(),
-                    element_flags: element_flags.map(|f| BytesView::new(f)),
-                },
-                grovedbg_types::Reference::CousinReference {
-                    swap_parent,
-                    element_flags,
-                } => ElementViewer::CousinReference {
-                    swap_parent: BytesView::new(swap_parent),
-                    element_flags: element_flags.map(|f| BytesView::new(f)),
-                },
-                grovedbg_types::Reference::RemovedCousinReference {
-                    swap_parent,
-                    element_flags,
-                } => ElementViewer::RemovedCousinReference {
-                    swap_parent: swap_parent.into_iter().map(|s| BytesView::new(s)).collect(),
-                    element_flags: element_flags.map(|f| BytesView::new(f)),
-                },
-                grovedbg_types::Reference::SiblingReference {
-                    sibling_key,
-                    element_flags,
-                } => ElementViewer::SiblingReference {
-                    sibling_key: BytesView::new(sibling_key),
-                    element_flags: element_flags.map(|f| BytesView::new(f)),
-                },
+            grovedbg_types::Element::Reference {
+                reference_path,
+                element_flags,
+            } => ElementViewer::Reference {
+                reference_path: reference_path.into(),
+                element_flags: element_flags.map(|f| BytesView::new(f)),
+            },
+            grovedbg_types::Element::BidirectionalReference {
+                reference_path,
+                element_flags,
+                slot_idx,
+                cascade_on_update,
+            } => ElementViewer::BidirectionalReference {
+                reference_path: reference_path.into(),
+                element_flags: element_flags.map(|f| BytesView::new(f)),
+                slot_idx,
+                cascade_on_update,
             },
         }
     }
@@ -522,28 +647,20 @@ impl ElementViewer {
                 }
             }
             ElementViewer::Sumtree {
-                root_key: Some(key),
+                root_key,
                 sum,
                 element_flags,
             } => {
-                ui.label(format!("Sum tree: {sum}"));
-                ui.horizontal(|line| {
-                    line.label("Root key:");
-                    key.draw(line);
-                });
-                if let Some(flags) = element_flags {
+                if let Some(root_key) = root_key {
+                    ui.label(format!("Sum tree: {sum}"));
                     ui.horizontal(|line| {
-                        line.label("Flags:");
-                        flags.draw(line);
+                        line.label("Root key:");
+                        root_key.draw(line);
                     });
+                } else {
+                    ui.label(format!("Empty sum tree: {sum}"));
                 }
-            }
-            ElementViewer::Sumtree {
-                root_key: None,
-                sum,
-                element_flags,
-            } => {
-                ui.label(format!("Empty sum tree: {sum}"));
+
                 if let Some(flags) = element_flags {
                     ui.horizontal(|line| {
                         line.label("Flags:");
@@ -561,6 +678,16 @@ impl ElementViewer {
                     });
                 }
             }
+            ElementViewer::ItemWithBackwardReferences { value, element_flags } => {
+                ui.label("Item with backward references");
+                value.draw(ui);
+                if let Some(flags) = element_flags {
+                    ui.horizontal(|line| {
+                        line.label("Flags:");
+                        flags.draw(line);
+                    });
+                }
+            }
             ElementViewer::SumItem { value, element_flags } => {
                 ui.label(format!("Sum item: {value}"));
                 if let Some(flags) = element_flags {
@@ -570,14 +697,8 @@ impl ElementViewer {
                     });
                 }
             }
-            ElementViewer::AbsolutePathReference { path, element_flags } => {
-                ui.label("Absolute path reference");
-                for (i, segment) in path.iter_mut().enumerate() {
-                    ui.horizontal(|line| {
-                        line.label(i.to_string());
-                        segment.draw(line);
-                    });
-                }
+            ElementViewer::SumItemWithBackwardReferences { value, element_flags } => {
+                ui.label(format!("Sum item with backward references: {value}"));
                 if let Some(flags) = element_flags {
                     ui.horizontal(|line| {
                         line.label("Flags:");
@@ -585,19 +706,12 @@ impl ElementViewer {
                     });
                 }
             }
-            ElementViewer::UpstreamRootHeightReference {
-                n_keep,
-                path_append,
+            ElementViewer::Reference {
+                reference_path,
                 element_flags,
             } => {
-                ui.label("Upstream root height reference");
-                ui.label(format!("N keep: {n_keep}"));
-                for (i, segment) in path_append.iter_mut().enumerate() {
-                    ui.horizontal(|line| {
-                        line.label(i.to_string());
-                        segment.draw(line);
-                    });
-                }
+                ui.label("Regular reference");
+                reference_path.draw(ui);
                 if let Some(flags) = element_flags {
                     ui.horizontal(|line| {
                         line.label("Flags:");
@@ -605,19 +719,16 @@ impl ElementViewer {
                     });
                 }
             }
-            ElementViewer::UpstreamRootHeightWithParentPathAdditionReference {
-                n_keep,
-                path_append,
+            ElementViewer::BidirectionalReference {
+                reference_path,
                 element_flags,
+                cascade_on_update,
+                slot_idx,
             } => {
-                ui.label("Upstream root height with parent path addition reference");
-                ui.label(format!("N keep: {n_keep}"));
-                for (i, segment) in path_append.iter_mut().enumerate() {
-                    ui.horizontal(|line| {
-                        line.label(i.to_string());
-                        segment.draw(line);
-                    });
-                }
+                ui.label("Bidirectional reference");
+                reference_path.draw(ui);
+                ui.label(format!("Cascade on update: {cascade_on_update}"));
+                ui.label(format!("Backward ref slot: {slot_idx}"));
                 if let Some(flags) = element_flags {
                     ui.horizontal(|line| {
                         line.label("Flags:");
@@ -625,19 +736,21 @@ impl ElementViewer {
                     });
                 }
             }
-            ElementViewer::UpstreamFromElementHeightReference {
-                n_remove,
-                path_append,
+            ElementViewer::BigSumtree {
+                root_key,
+                sum,
                 element_flags,
             } => {
-                ui.label("Upstream from element height reference ");
-                ui.label(format!("N remove: {n_remove}"));
-                for (i, segment) in path_append.iter_mut().enumerate() {
+                if let Some(root_key) = root_key {
+                    ui.label(format!("Big sum tree: {sum}"));
                     ui.horizontal(|line| {
-                        line.label(i.to_string());
-                        segment.draw(line);
+                        line.label("Root key:");
+                        root_key.draw(line);
                     });
+                } else {
+                    ui.label(format!("Empty big sum tree: {sum}"));
                 }
+
                 if let Some(flags) = element_flags {
                     ui.horizontal(|line| {
                         line.label("Flags:");
@@ -645,12 +758,21 @@ impl ElementViewer {
                     });
                 }
             }
-            ElementViewer::CousinReference {
-                swap_parent,
+            ElementViewer::CountTree {
+                root_key,
+                count,
                 element_flags,
             } => {
-                ui.label("Cousin reference");
-                swap_parent.draw(ui);
+                if let Some(root_key) = root_key {
+                    ui.label(format!("Count tree: {count}"));
+                    ui.horizontal(|line| {
+                        line.label("Root key:");
+                        root_key.draw(line);
+                    });
+                } else {
+                    ui.label(format!("Empty count tree: {count}"));
+                }
+
                 if let Some(flags) = element_flags {
                     ui.horizontal(|line| {
                         line.label("Flags:");
@@ -658,30 +780,22 @@ impl ElementViewer {
                     });
                 }
             }
-            ElementViewer::RemovedCousinReference {
-                swap_parent,
+            ElementViewer::CountSumTree {
+                root_key,
+                count,
+                sum,
                 element_flags,
             } => {
-                ui.label("Removed cousin reference");
-                for (i, segment) in swap_parent.iter_mut().enumerate() {
+                if let Some(root_key) = root_key {
+                    ui.label(format!("Count sum tree: count {count}, sum {sum}"));
                     ui.horizontal(|line| {
-                        line.label(i.to_string());
-                        segment.draw(line);
+                        line.label("Root key:");
+                        root_key.draw(line);
                     });
+                } else {
+                    ui.label(format!("Empty count sum tree: count {count}, sum {sum}"));
                 }
-                if let Some(flags) = element_flags {
-                    ui.horizontal(|line| {
-                        line.label("Flags:");
-                        flags.draw(line);
-                    });
-                }
-            }
-            ElementViewer::SiblingReference {
-                sibling_key,
-                element_flags,
-            } => {
-                ui.label("Sibling reference");
-                sibling_key.draw(ui);
+
                 if let Some(flags) = element_flags {
                     ui.horizontal(|line| {
                         line.label("Flags:");
