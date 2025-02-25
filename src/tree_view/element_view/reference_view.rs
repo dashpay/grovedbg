@@ -1,13 +1,13 @@
 use std::{borrow::Cow, cmp, fmt::Write};
 
-use eframe::egui::{self, Painter, Pos2, Stroke, Vec2};
+use eframe::egui::{self, Color32, Painter, Pos2, Stroke, Vec2};
 use grovedb_epoch_based_storage_flags::StorageFlags;
-use grovedbg_types::Reference;
+use grovedbg_types::ReferencePath;
 
 use crate::{
     bytes_utils::{binary_label, bytes_by_display_variant, BytesDisplayVariant},
     path_ctx::{path_label, Path},
-    theme::reference_line_color,
+    theme::{bidi_reference_line_color, reference_line_color},
     tree_data::SubtreeDataMap,
     tree_view::ElementViewContext,
 };
@@ -18,10 +18,69 @@ pub(super) fn draw_reference(
     ui: &mut egui::Ui,
     element_view_context: &mut ElementViewContext,
     key: &[u8],
-    reference: &Reference,
+    reference: &ReferencePath,
+    flags: Option<&[u8]>,
     show_details: &mut bool,
     flags_display: &mut BytesDisplayVariant,
     subtrees_map: &SubtreeDataMap,
+) -> Result<(), ReferenceError> {
+    let color = reference_line_color(ui.ctx());
+    draw_reference_internal(
+        ui,
+        element_view_context,
+        key,
+        reference,
+        flags,
+        show_details,
+        flags_display,
+        subtrees_map,
+        None,
+        color,
+    )
+}
+
+pub(super) fn draw_bidi_reference(
+    ui: &mut egui::Ui,
+    element_view_context: &mut ElementViewContext,
+    key: &[u8],
+    reference: &ReferencePath,
+    slot_idx: u8,
+    cascade_on_update: bool,
+    flags: Option<&[u8]>,
+    show_details: &mut bool,
+    flags_display: &mut BytesDisplayVariant,
+    subtrees_map: &SubtreeDataMap,
+) -> Result<(), ReferenceError> {
+    let color = bidi_reference_line_color(ui.ctx());
+    let bidi_details = BidiDetails {
+        cascade_on_update,
+        slot_idx,
+    };
+    draw_reference_internal(
+        ui,
+        element_view_context,
+        key,
+        reference,
+        flags,
+        show_details,
+        flags_display,
+        subtrees_map,
+        Some(bidi_details),
+        color,
+    )
+}
+
+fn draw_reference_internal(
+    ui: &mut egui::Ui,
+    element_view_context: &mut ElementViewContext,
+    key: &[u8],
+    reference: &ReferencePath,
+    flags: Option<&[u8]>,
+    show_details: &mut bool,
+    flags_display: &mut BytesDisplayVariant,
+    subtrees_map: &SubtreeDataMap,
+    bidi_details: Option<BidiDetails>, // todo: refactor
+    color: Color32,
 ) -> Result<(), ReferenceError> {
     let (referenced_path, referenced_key) =
         get_absolute_path_key(element_view_context.path(), key, reference)?;
@@ -72,16 +131,6 @@ pub(super) fn draw_reference(
         ));
     });
 
-    let flags = match reference {
-        Reference::AbsolutePathReference { element_flags, .. } => element_flags,
-        Reference::UpstreamRootHeightReference { element_flags, .. } => element_flags,
-        Reference::UpstreamRootHeightWithParentPathAdditionReference { element_flags, .. } => element_flags,
-        Reference::UpstreamFromElementHeightReference { element_flags, .. } => element_flags,
-        Reference::CousinReference { element_flags, .. } => element_flags,
-        Reference::RemovedCousinReference { element_flags, .. } => element_flags,
-        Reference::SiblingReference { element_flags, .. } => element_flags,
-    };
-
     if let Some(flags) = flags {
         ui.horizontal(|line| {
             line.label("Flags:");
@@ -94,7 +143,7 @@ pub(super) fn draw_reference(
     }
 
     if *show_details {
-        draw_reference_details(ui, reference);
+        draw_reference_details(ui, reference, bidi_details);
     }
 
     // Draw reference arrow
@@ -142,15 +191,7 @@ pub(super) fn draw_reference(
                 )
             }
         };
-        arrow(
-            painter,
-            from,
-            to - from,
-            Stroke {
-                width: 1.0,
-                color: reference_line_color(ui.ctx()),
-            },
-        );
+        arrow(painter, from, to - from, Stroke { width: 1.0, color });
     }
 
     Ok(())
@@ -168,27 +209,35 @@ fn arrow(painter: &Painter, origin: Pos2, vec: Vec2, stroke: impl Into<Stroke>) 
     painter.line_segment([tip, tip - tip_length * (rot.inverse() * dir)], stroke);
 }
 
-fn draw_reference_details(ui: &mut egui::Ui, reference: &Reference) {
+struct BidiDetails {
+    cascade_on_update: bool,
+    slot_idx: u8,
+}
+
+fn draw_reference_details(ui: &mut egui::Ui, reference: &ReferencePath, bidi_details: Option<BidiDetails>) {
+    if bidi_details.is_some() {
+        ui.label("Bidirectional reference");
+    }
     match reference {
-        Reference::AbsolutePathReference { path, .. } => {
+        ReferencePath::AbsolutePathReference { path, .. } => {
             ui.label("Absolute path");
             ui.label(format!("Path: {}", hex_array(path)));
         }
-        Reference::UpstreamRootHeightReference {
+        ReferencePath::UpstreamRootHeightReference {
             n_keep, path_append, ..
         } => {
             ui.label("Upstream root height");
             ui.label(format!("N keep: {n_keep}"));
             ui.label(format!("Path append: {}", hex_array(path_append)));
         }
-        Reference::UpstreamRootHeightWithParentPathAdditionReference {
+        ReferencePath::UpstreamRootHeightWithParentPathAdditionReference {
             n_keep, path_append, ..
         } => {
             ui.label("Upstream root height with parent path addition");
             ui.label(format!("N keep: {n_keep}"));
             ui.label(format!("Path append: {}", hex_array(path_append)));
         }
-        Reference::UpstreamFromElementHeightReference {
+        ReferencePath::UpstreamFromElementHeightReference {
             n_remove,
             path_append,
             ..
@@ -197,18 +246,23 @@ fn draw_reference_details(ui: &mut egui::Ui, reference: &Reference) {
             ui.label(format!("N remove: {n_remove}"));
             ui.label(format!("Path append: {}", hex_array(path_append)));
         }
-        Reference::CousinReference { swap_parent, .. } => {
+        ReferencePath::CousinReference { swap_parent, .. } => {
             ui.label("Cousin");
             ui.label(format!("Swap parent: {}", hex::encode(swap_parent)));
         }
-        Reference::RemovedCousinReference { swap_parent, .. } => {
+        ReferencePath::RemovedCousinReference { swap_parent, .. } => {
             ui.label("Removed cousin");
             ui.label(format!("Swap parent: {}", hex_array(swap_parent)));
         }
-        Reference::SiblingReference { sibling_key, .. } => {
+        ReferencePath::SiblingReference { sibling_key, .. } => {
             ui.label("Sibling");
             ui.label(format!("Sibling key: {}", hex::encode(sibling_key)));
         }
+    }
+
+    if let Some(bidi) = bidi_details {
+        ui.label(format!("Cascade on update: {}", bidi.cascade_on_update));
+        ui.label(format!("Backward reference slot: {}", bidi.slot_idx));
     }
 }
 
@@ -234,17 +288,17 @@ pub(super) struct ReferenceError(pub(super) &'static str);
 fn get_absolute_path_key<'a, 'b>(
     current_path: Path<'a>,
     current_key: &'b [u8],
-    reference: &'b Reference,
+    reference: &'b ReferencePath,
 ) -> Result<(Path<'a>, Cow<'b, [u8]>), ReferenceError> {
     match reference {
-        Reference::AbsolutePathReference { path, .. } => {
+        ReferencePath::AbsolutePathReference { path, .. } => {
             let mut path = path.iter();
             let key = path
                 .next_back()
                 .ok_or_else(|| ReferenceError("empty absolute reference"))?;
             Ok((current_path.get_ctx().add_iter(path), key.into()))
         }
-        Reference::UpstreamRootHeightReference {
+        ReferencePath::UpstreamRootHeightReference {
             n_keep, path_append, ..
         } => {
             if (*n_keep as usize) > current_path.level() {
@@ -265,7 +319,7 @@ fn get_absolute_path_key<'a, 'b>(
                 .map(|(path, key)| (path, key.into()))
                 .ok_or_else(|| ReferenceError("the computed absolute path is empty"))
         }
-        Reference::UpstreamRootHeightWithParentPathAdditionReference {
+        ReferencePath::UpstreamRootHeightWithParentPathAdditionReference {
             n_keep, path_append, ..
         } => {
             if (*n_keep as usize) > current_path.level() {
@@ -288,7 +342,7 @@ fn get_absolute_path_key<'a, 'b>(
                 .map(|(path, key)| (path, key.into()))
                 .ok_or_else(|| ReferenceError("the computed absolute path is empty"))
         }
-        Reference::UpstreamFromElementHeightReference {
+        ReferencePath::UpstreamFromElementHeightReference {
             n_remove,
             path_append,
             ..
@@ -314,14 +368,14 @@ fn get_absolute_path_key<'a, 'b>(
                 .map(|(path, key)| (path, key.into()))
                 .ok_or_else(|| ReferenceError("the computed absolute path is empty"))
         }
-        Reference::CousinReference { swap_parent, .. } => Ok((
+        ReferencePath::CousinReference { swap_parent, .. } => Ok((
             current_path
                 .parent()
                 .ok_or_else(|| ReferenceError("no parent to swap"))?
                 .child(swap_parent.to_vec()),
             current_key.into(),
         )),
-        Reference::RemovedCousinReference { swap_parent, .. } => {
+        ReferencePath::RemovedCousinReference { swap_parent, .. } => {
             let mut new_path = current_path
                 .parent()
                 .ok_or_else(|| ReferenceError("can't swap parent of an empty path"))?;
@@ -330,6 +384,6 @@ fn get_absolute_path_key<'a, 'b>(
             }
             Ok((new_path, current_key.into()))
         }
-        Reference::SiblingReference { sibling_key, .. } => Ok((current_path, sibling_key.into())),
+        ReferencePath::SiblingReference { sibling_key, .. } => Ok((current_path, sibling_key.into())),
     }
 }
