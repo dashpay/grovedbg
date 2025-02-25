@@ -14,8 +14,6 @@ const REFERENCE_COLOR_DARK: Color32 = Color32::LIGHT_BLUE;
 
 const BIDI_REFERENCE_COLOR_LIGHT: Color32 = Color32::from_rgb(0, 0x9E, 0x9E);
 const BIDI_REFERENCE_COLOR_DARK: Color32 = Color32::from_rgb(0, 0x9E, 0x9E);
-// const BIDI_REFERENCE_COLOR_DARK: Color32 = Color32::from_rgb(0xAD, 0xD8,
-// 0xE6);
 
 const PROOF_NODE_COLOR_LIGHT: Color32 = Color32::from_rgb(143, 0, 179);
 const PROOF_NODE_COLOR_DARK: Color32 = Color32::from_rgb(215, 119, 240);
